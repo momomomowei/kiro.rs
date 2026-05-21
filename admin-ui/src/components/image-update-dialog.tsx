@@ -6,7 +6,6 @@ import {
   Info,
   RefreshCw,
   RotateCcw,
-  Save,
   Sparkles,
   UploadCloud,
 } from 'lucide-react'
@@ -54,7 +53,6 @@ function formatDateTime(value: string): string {
 
 export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps) {
   const queryClient = useQueryClient()
-  const [image, setImage] = useState('')
   const [autoApplyTime, setAutoApplyTime] = useState('03:00')
   const [lastOutput, setLastOutput] = useState('')
   const [tipsOpen, setTipsOpen] = useState(false)
@@ -121,21 +119,8 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
 
   useEffect(() => {
     if (!data) return
-    setImage(data.image || '')
     setAutoApplyTime(data.autoApplyTime || '03:00')
   }, [data])
-
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      setUpdateConfig({
-        image: image.trim(),
-      }),
-    onSuccess: () => {
-      toast.success('更新配置已保存')
-      queryClient.invalidateQueries({ queryKey: ['update-config'] })
-    },
-    onError: (err) => toast.error(`保存失败: ${extractErrorMessage(err)}`),
-  })
 
   const pullMutation = useMutation({
     mutationFn: pullUpdateImage,
@@ -168,7 +153,6 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
 
   const busy =
     isLoading ||
-    saveMutation.isPending ||
     pullMutation.isPending ||
     applyMutation.isPending ||
     rollbackMutation.isPending ||
@@ -189,7 +173,7 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UploadCloud className="h-4 w-4" />
-            镜像在线更新
+            在线更新
             <TooltipProvider delayDuration={0} disableHoverableContent={false}>
               <Tooltip open={tipsOpen} onOpenChange={setTipsOpen}>
                 <TooltipTrigger asChild>
@@ -212,17 +196,11 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
                   onMouseEnter={() => setTipsOpen(true)}
                   onMouseLeave={() => setTipsOpen(false)}
                 >
-                  <div className="mb-1 font-medium">在线更新前置条件</div>
+                  <div className="mb-1 font-medium">在线更新机制</div>
                   <ul className="list-disc space-y-1 pl-4">
-                    <li>
-                      容器由 <code className="font-mono">docker compose</code> 启动
-                    </li>
-                    <li>
-                      容器挂载 <code className="font-mono">/var/run/docker.sock</code>
-                    </li>
-                    <li>
-                      宿主机 <code className="font-mono">docker-compose.yml</code> 仍在原位置
-                    </li>
+                    <li>从 GitHub Releases 下载新版本二进制并校验 SHA256</li>
+                    <li>原子替换当前 <code className="font-mono">kiro-rs</code>，旧版备份到 <code className="font-mono">.backup</code></li>
+                    <li>进程退出后由容器重启策略接管重启</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
@@ -231,27 +209,6 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="rounded-md border p-3 space-y-3">
-            {data?.previousImage && (
-              <div className="text-xs text-muted-foreground">
-                上一版本：
-                <code className="font-mono">{data.previousImage}</code>
-                （可一键回退）
-              </div>
-            )}
-
-            <label className="grid gap-1">
-              <span className="text-xs font-medium text-muted-foreground">镜像</span>
-              <Input
-                value={image}
-                onChange={(e) => setImage(e.target.value)}
-                placeholder="zyphrzero/kiro-rs:latest"
-                disabled={busy}
-                className="font-mono text-sm"
-              />
-            </label>
-          </div>
-
           <div
             className={`rounded-md border p-3 ${
               updateCheck?.hasUpdate
@@ -347,11 +304,19 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
             )}
 
             <div className="mt-3 space-y-3 border-t pt-3">
+              {data?.previousVersion && (
+                <div className="text-xs text-muted-foreground">
+                  上一版本：
+                  <code className="font-mono">{data.previousVersion}</code>
+                  （可一键回退）
+                </div>
+              )}
+
               <div className="flex items-start justify-between gap-3">
                 <div className="text-xs">
                   <div className="font-medium text-foreground">无人值守自动更新</div>
                   <div className="text-muted-foreground">
-                    开启后服务每天到指定时间自动检查新版本，发现新版即拉取镜像并重建容器。
+                    开启后服务每天到指定时间自动检查新版本，发现新版即下载二进制并重启。
                   </div>
                 </div>
                 <Switch
@@ -398,20 +363,7 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
             <Button
               type="button"
               variant="outline"
-              disabled={busy || !image.trim()}
-              onClick={() => saveMutation.mutate()}
-            >
-              {saveMutation.isPending ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              保存配置
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || !image.trim()}
+              disabled={busy}
               onClick={() => pullMutation.mutate()}
             >
               {pullMutation.isPending ? (
@@ -424,11 +376,11 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
             <Button
               type="button"
               variant="outline"
-              disabled={busy || !data?.previousImage}
+              disabled={busy || !data?.previousVersion}
               onClick={() => rollbackMutation.mutate()}
               title={
-                data?.previousImage
-                  ? `回退到 ${data.previousImage}`
+                data?.previousVersion
+                  ? `回退到 ${data.previousVersion}`
                   : '尚未记录可回退的版本'
               }
             >
@@ -442,7 +394,7 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
           </div>
           <Button
             type="button"
-            disabled={busy || !image.trim()}
+            disabled={busy}
             onClick={() => applyMutation.mutate()}
           >
             {applyMutation.isPending ? (
@@ -457,6 +409,7 @@ export function ImageUpdateDialog({ open, onOpenChange }: ImageUpdateDialogProps
     </Dialog>
   )
 }
+
 interface ReleaseNotesPanelProps {
   version: string
   title?: string

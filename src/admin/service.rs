@@ -57,8 +57,7 @@ struct CachedUpdateCheck {
 
 #[derive(Debug, Clone)]
 struct RuntimeUpdateConfig {
-    image: String,
-    previous_image: Option<String>,
+    previous_version: Option<String>,
     auto_apply: bool,
     auto_apply_time: String,
 }
@@ -66,8 +65,7 @@ struct RuntimeUpdateConfig {
 impl RuntimeUpdateConfig {
     fn from_config(config: &Config) -> Self {
         Self {
-            image: config.update_image.clone(),
-            previous_image: config.update_previous_image.clone(),
+            previous_version: config.update_previous_version.clone(),
             auto_apply: config.update_auto_apply,
             auto_apply_time: config.update_auto_apply_time.clone(),
         }
@@ -75,8 +73,7 @@ impl RuntimeUpdateConfig {
 
     fn response(&self) -> UpdateConfigResponse {
         UpdateConfigResponse {
-            image: self.image.clone(),
-            previous_image: self.previous_image.clone(),
+            previous_version: self.previous_version.clone(),
             auto_apply: self.auto_apply,
             auto_apply_time: self.auto_apply_time.clone(),
         }
@@ -177,58 +174,6 @@ fn normalize_auto_apply_time(value: &str) -> Result<String, AdminServiceError> {
     Ok(format!("{:02}:{:02}", h, m))
 }
 
-fn validate_image_ref(image: &str) -> Result<(), AdminServiceError> {
-    let value = image.trim();
-    if value.is_empty() {
-        return Err(AdminServiceError::InvalidCredential(
-            "镜像地址不能为空".to_string(),
-        ));
-    }
-    if value.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err(AdminServiceError::InvalidCredential(
-            "镜像地址不能包含空白或控制字符".to_string(),
-        ));
-    }
-    // 仅允许 Docker Hub 镜像：可以省略 host（如 `zyphrzero/kiro-rs:latest`），
-    // 也可以显式写 `docker.io/...` 或 `registry-1.docker.io/...`。
-    let allowed_prefixes = ["docker.io/", "registry-1.docker.io/"];
-    let host_segment = value.split('/').next().unwrap_or("");
-    let looks_like_dockerhub = !host_segment.contains('.') && !host_segment.contains(':');
-    if !allowed_prefixes.iter().any(|p| value.starts_with(p)) && !looks_like_dockerhub {
-        return Err(AdminServiceError::InvalidCredential(
-            "在线更新只支持 Docker Hub 镜像（如 owner/image:tag 或 docker.io/owner/image:tag）"
-                .to_string(),
-        ));
-    }
-    let path_parts: Vec<&str> = value
-        .trim_start_matches("docker.io/")
-        .trim_start_matches("registry-1.docker.io/")
-        .split('/')
-        .collect();
-    if path_parts.len() < 2 || path_parts.iter().any(|part| part.is_empty()) {
-        return Err(AdminServiceError::InvalidCredential(
-            "Docker Hub 镜像需为 owner/image[:tag] 格式".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-/// Docker Hub Hub API（`hub.docker.com/v2/repositories/<owner>/<repo>/tags`）
-/// 返回 JSON 中我们关心的字段。仅依赖该接口的稳定字段，新增字段不影响解析。
-#[derive(Debug, Deserialize)]
-struct DockerHubTagsResponse {
-    #[serde(default)]
-    results: Vec<DockerHubTag>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DockerHubTag {
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    last_updated: String,
-}
-
 /// GitHub `repos/{owner}/{repo}/releases/tags/{tag}` 返回 JSON 中我们关心
 /// 的字段，用于在「检查更新」结果里附带本次发布的 changelog。
 #[derive(Debug, Deserialize)]
@@ -241,29 +186,8 @@ struct GitHubRelease {
     html_url: String,
     #[serde(default)]
     published_at: String,
-}
-
-/// 把镜像引用拆成 `(owner, repo)`；忽略可选的 `:tag` 与 `docker.io/` 前缀。
-///
-/// 例如：
-/// - `zyphrzero/kiro-rs:latest` → `("zyphrzero", "kiro-rs")`
-/// - `docker.io/library/redis` → `("library", "redis")`
-fn dockerhub_owner_repo(image: &str) -> Option<(String, String)> {
-    let trimmed = image
-        .trim()
-        .trim_start_matches("docker.io/")
-        .trim_start_matches("registry-1.docker.io/")
-        .split('@') // 去除 @sha256:... 摘要
-        .next()?
-        .split(':') // 去除 :tag
-        .next()?;
-    let mut parts = trimmed.split('/');
-    let owner = parts.next()?.to_string();
-    let repo = parts.next()?.to_string();
-    if owner.is_empty() || repo.is_empty() || parts.next().is_some() {
-        return None;
-    }
-    Some((owner, repo))
+    #[serde(default)]
+    tag_name: String,
 }
 
 /// 比较两个 semver 字符串。仅按 `MAJOR.MINOR.PATCH` 三段数字比较，忽略
@@ -289,15 +213,6 @@ fn parse_semver_core(value: &str) -> [u32; 3] {
     out
 }
 
-/// 判断字符串是否是合法的 semver-like tag（必须以数字 `MAJOR.MINOR.PATCH` 开头）。
-/// 这样 `latest` / `rolling` / `dev` 等非版本 tag 会被自动排除。
-fn is_semver_tag(value: &str) -> bool {
-    let core = value.trim().trim_start_matches('v');
-    let mut parts = core.split(|c: char| c == '-' || c == '+').next().unwrap_or("").split('.');
-    let first = parts.next().unwrap_or("");
-    !first.is_empty() && first.chars().all(|c| c.is_ascii_digit())
-}
-
 /// 当前构建类型。在线更新走"下载 GitHub Releases 二进制 + 进程退出由
 /// docker restart policy 接管重启"的方案。
 const BUILD_TYPE: &str = "binary";
@@ -310,8 +225,7 @@ fn staged_binary_path(exe: &std::path::Path) -> std::path::PathBuf {
 }
 
 /// GitHub Release 仓库名（owner/repo）。
-/// 镜像版本号从 Docker Hub 取，但 release notes / changelog 由 GitHub Release
-/// 维护，需要单独拉取。
+/// 在线更新所需的版本号、changelog、二进制资产都从这里取。
 const GITHUB_RELEASES_REPO: &str = "ZyphrZero/kiro.rs";
 
 impl AdminService {
@@ -893,13 +807,6 @@ impl AdminService {
         &self,
         req: SetUpdateConfigRequest,
     ) -> Result<UpdateConfigResponse, AdminServiceError> {
-        if let Some(image) = &req.image {
-            let trimmed = image.trim();
-            if !trimmed.is_empty() {
-                validate_image_ref(trimmed)?;
-            }
-        }
-
         // 在写入运行时之前先校验时间格式，并规范化成两位补零的 HH:MM
         let normalized_time = match req.auto_apply_time.as_deref() {
             Some(value) => Some(normalize_auto_apply_time(value)?),
@@ -908,9 +815,6 @@ impl AdminService {
 
         {
             let mut runtime = self.update_config.lock();
-            if let Some(image) = &req.image {
-                runtime.image = image.trim().to_string();
-            }
             if let Some(auto_apply) = req.auto_apply {
                 runtime.auto_apply = auto_apply;
             }
@@ -920,9 +824,6 @@ impl AdminService {
         }
 
         self.update_config_file(move |c| {
-            if let Some(image) = req.image {
-                c.update_image = image.trim().to_string();
-            }
             if let Some(auto_apply) = req.auto_apply {
                 c.update_auto_apply = auto_apply;
             }
@@ -937,7 +838,6 @@ impl AdminService {
     /// 下载新版二进制并通过校验和验证（对应前端「拉取镜像」按钮）。
     /// 不替换当前可执行文件，便于用户在正式应用前先确认下载成功。
     pub async fn pull_update_image(&self) -> Result<ImageUpdateResponse, AdminServiceError> {
-        let image = self.update_config.lock().image.trim().to_string();
         let proxy = self.token_manager.proxy().map(|p| p.url.clone());
         let exe = super::binary_update::current_executable()?;
         let staged = staged_binary_path(&exe);
@@ -948,7 +848,6 @@ impl AdminService {
         Ok(ImageUpdateResponse {
             success: true,
             message: format!("已下载并校验 v{} 二进制", version),
-            image,
             output: Some(format!(
                 "downloaded: v{}\nstaged: {}",
                 version,
@@ -962,7 +861,6 @@ impl AdminService {
     /// 下载新版二进制并替换当前可执行文件，随后让进程退出由
     /// `restart: unless-stopped` 接管重启（对应前端「更新并重启」按钮）。
     pub async fn apply_image_update(&self) -> Result<ImageUpdateResponse, AdminServiceError> {
-        let image = self.update_config.lock().image.trim().to_string();
         let proxy = self.token_manager.proxy().map(|p| p.url.clone());
         let exe = super::binary_update::current_executable()?;
         let staged = staged_binary_path(&exe);
@@ -975,10 +873,10 @@ impl AdminService {
         super::binary_update::install_binary(&exe, &staged)?;
 
         let prev_label = format!("v{}", previous_version);
-        self.update_config.lock().previous_image = Some(prev_label.clone());
+        self.update_config.lock().previous_version = Some(prev_label.clone());
         let prev_to_persist = prev_label.clone();
         self.update_config_file(move |c| {
-            c.update_previous_image = Some(prev_to_persist);
+            c.update_previous_version = Some(prev_to_persist);
         });
 
         super::binary_update::schedule_self_exit(std::time::Duration::from_secs(2));
@@ -989,7 +887,6 @@ impl AdminService {
                 "已替换为 v{}，进程将在 2 秒后退出，由容器重启策略接管",
                 version
             ),
-            image,
             output: Some(format!(
                 "previous: v{}\ninstalled: v{}",
                 previous_version, version
@@ -1001,9 +898,10 @@ impl AdminService {
 
     /// 把可执行文件回退到 `<exe>.backup`，再重启进程。
     pub async fn rollback_image_update(&self) -> Result<ImageUpdateResponse, AdminServiceError> {
-        let runtime = self.update_config.lock().clone();
-        let previous_label = runtime
-            .previous_image
+        let previous_label = self
+            .update_config
+            .lock()
+            .previous_version
             .as_deref()
             .map(str::trim)
             .filter(|v| !v.is_empty())
@@ -1017,10 +915,10 @@ impl AdminService {
         let exe = super::binary_update::current_executable()?;
         super::binary_update::restore_backup(&exe)?;
 
-        // 清空 previous_image 避免连续回退指向不存在的版本
-        self.update_config.lock().previous_image = None;
+        // 清空 previous_version 避免连续回退指向不存在的版本
+        self.update_config.lock().previous_version = None;
         self.update_config_file(|c| {
-            c.update_previous_image = None;
+            c.update_previous_version = None;
         });
 
         super::binary_update::schedule_self_exit(std::time::Duration::from_secs(2));
@@ -1031,7 +929,6 @@ impl AdminService {
                 "已回退到 {}，进程将在 2 秒后退出，由容器重启策略接管",
                 previous_label
             ),
-            image: runtime.image,
             output: Some(format!("rolled back to: {}", previous_label)),
             applied: true,
             need_restart: true,
@@ -1105,131 +1002,9 @@ impl AdminService {
     }
 
     async fn fetch_latest_release(&self) -> Result<UpdateCheckInfo, AdminServiceError> {
-        let configured_image = self.update_config.lock().image.clone();
-        // 用户清空 image 时降级到默认镜像，行为对齐 Config::load 的清洗逻辑
-        let image = if configured_image.trim().is_empty() {
-            "zyphrzero/kiro-rs:latest".to_string()
-        } else {
-            configured_image
-        };
-        let (owner, repo) = dockerhub_owner_repo(image.trim()).ok_or_else(|| {
-            AdminServiceError::InternalError(format!(
-                "无法从镜像 {} 解析出 Docker Hub owner/repo",
-                image
-            ))
-        })?;
-
-        // page_size=100 在我们目标仓库已足够覆盖所有版本 tag；增量发布也不会
-        // 一次性产生上百个版本。`page=1` 即可拿到最新批次。
         let url = format!(
-            "https://hub.docker.com/v2/repositories/{}/{}/tags?page_size=100&page=1",
-            owner, repo
-        );
-        let resp = reqwest::Client::new()
-            .get(&url)
-            .header("Accept", "application/json")
-            .header("User-Agent", "kiro-rs-update-checker")
-            .timeout(std::time::Duration::from_secs(15))
-            .send()
-            .await
-            .map_err(|e| {
-                AdminServiceError::InternalError(format!("请求 Docker Hub API 失败: {}", e))
-            })?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            // Docker Hub 仓库不存在或私有时返回 404；这是配置错误而非服务故障，
-            // 给用户更具体的提示，让他们知道该去看 updateImage 配置而不是日志。
-            if status == reqwest::StatusCode::NOT_FOUND {
-                return Err(AdminServiceError::InternalError(format!(
-                    "Docker Hub 上未找到镜像 {}/{}（可能仓库还未发布或为私有）。请确认 updateImage 指向的仓库存在并已公开。",
-                    owner, repo
-                )));
-            }
-            return Err(AdminServiceError::InternalError(format!(
-                "Docker Hub API 返回 {}: {}",
-                status,
-                body.chars().take(200).collect::<String>()
-            )));
-        }
-
-        let payload: DockerHubTagsResponse = resp.json().await.map_err(|e| {
-            AdminServiceError::InternalError(format!("解析 Docker Hub 响应失败: {}", e))
-        })?;
-
-        // 过滤出语义化版本 tag（排除 latest / rolling / dev 之类），按版本号选最大
-        let latest_tag = payload
-            .results
-            .into_iter()
-            .filter(|t| is_semver_tag(&t.name))
-            .max_by(|a, b| parse_semver_core(&a.name).cmp(&parse_semver_core(&b.name)));
-
-        let current = env!("CARGO_PKG_VERSION").to_string();
-        let (latest_version, published_at) = match latest_tag {
-            Some(tag) => (
-                tag.name.trim().trim_start_matches('v').to_string(),
-                Some(tag.last_updated).filter(|v| !v.is_empty()),
-            ),
-            None => (String::new(), None),
-        };
-        let has_update =
-            !latest_version.is_empty() && compare_semver(&current, &latest_version).is_lt();
-
-        let release_url = if !latest_version.is_empty() {
-            Some(format!(
-                "https://hub.docker.com/r/{}/{}/tags",
-                owner, repo
-            ))
-        } else {
-            None
-        };
-
-        // 拉取 GitHub Release 上的 changelog；失败不影响主流程，前端能拿到
-        // 版本号就够展示红点了。published_at 优先用 GitHub Release 给出的，
-        // 因为它是发布动作的时间，比 Docker Hub 推送时间更接近"用户视角的版本时间"。
-        let mut release_name: Option<String> = None;
-        let mut release_notes: Option<String> = None;
-        let mut release_html_url: Option<String> = None;
-        let mut release_published_at: Option<String> = None;
-        if !latest_version.is_empty() {
-            match Self::fetch_github_release(&latest_version).await {
-                Ok(release) => {
-                    release_name = Some(release.name).filter(|v| !v.is_empty());
-                    release_notes = Some(release.body).filter(|v| !v.is_empty());
-                    release_html_url = Some(release.html_url).filter(|v| !v.is_empty());
-                    release_published_at = Some(release.published_at).filter(|v| !v.is_empty());
-                }
-                Err(e) => {
-                    tracing::debug!("获取 GitHub Release 信息失败（不影响检查更新）：{}", e);
-                }
-            }
-        }
-
-        Ok(UpdateCheckInfo {
-            current_version: current,
-            latest_version,
-            has_update,
-            build_type: BUILD_TYPE.to_string(),
-            release_name,
-            release_notes,
-            // 优先用 GitHub Release 页面 URL（带 changelog），回退到 Docker Hub tag 列表
-            release_url: release_html_url.or(release_url),
-            // GitHub published_at 更精确，未拿到就回退到 Docker Hub last_updated
-            published_at: release_published_at.or(published_at),
-            checked_at: Utc::now().to_rfc3339(),
-            cached: false,
-            warning: None,
-        })
-    }
-
-    /// 拉 GitHub Releases 上指定版本的发布信息（用于展示 changelog）。
-    /// 调用方负责处理失败 —— 这条不能阻塞主版本检查流程。
-    async fn fetch_github_release(version: &str) -> Result<GitHubRelease, AdminServiceError> {
-        let tag = format!("v{}", version.trim());
-        let url = format!(
-            "https://api.github.com/repos/{}/releases/tags/{}",
-            GITHUB_RELEASES_REPO, tag
+            "https://api.github.com/repos/{}/releases/latest",
+            GITHUB_RELEASES_REPO
         );
         let resp = reqwest::Client::new()
             .get(&url)
@@ -1239,18 +1014,42 @@ impl AdminService {
             .timeout(std::time::Duration::from_secs(15))
             .send()
             .await
-            .map_err(|e| AdminServiceError::InternalError(format!("请求 GitHub API 失败: {}", e)))?;
+            .map_err(|e| {
+                AdminServiceError::InternalError(format!("请求 GitHub API 失败: {}", e))
+            })?;
 
         if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
             return Err(AdminServiceError::InternalError(format!(
-                "GitHub API 返回 {}",
-                resp.status()
+                "GitHub API 返回 {}: {}",
+                status,
+                body.chars().take(200).collect::<String>()
             )));
         }
 
-        resp.json::<GitHubRelease>()
-            .await
-            .map_err(|e| AdminServiceError::InternalError(format!("解析 GitHub release 失败: {}", e)))
+        let release: GitHubRelease = resp.json().await.map_err(|e| {
+            AdminServiceError::InternalError(format!("解析 GitHub release 失败: {}", e))
+        })?;
+
+        let current = env!("CARGO_PKG_VERSION").to_string();
+        let latest_version = release.tag_name.trim().trim_start_matches('v').to_string();
+        let has_update =
+            !latest_version.is_empty() && compare_semver(&current, &latest_version).is_lt();
+
+        Ok(UpdateCheckInfo {
+            current_version: current,
+            latest_version,
+            has_update,
+            build_type: BUILD_TYPE.to_string(),
+            release_name: Some(release.name).filter(|v| !v.is_empty()),
+            release_notes: Some(release.body).filter(|v| !v.is_empty()),
+            release_url: Some(release.html_url).filter(|v| !v.is_empty()),
+            published_at: Some(release.published_at).filter(|v| !v.is_empty()),
+            checked_at: Utc::now().to_rfc3339(),
+            cached: false,
+            warning: None,
+        })
     }
 
     /// 获取负载均衡模式
@@ -2268,17 +2067,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validates_image_refs() {
-        assert!(validate_image_ref("zyphrzero/kiro-rs:latest").is_ok());
-        assert!(validate_image_ref(" docker.io/owner/kiro-rs:v1 ").is_ok());
-        assert!(validate_image_ref("registry-1.docker.io/owner/kiro-rs").is_ok());
-
-        assert!(validate_image_ref("").is_err());
-        assert!(validate_image_ref("ghcr.io/owner/kiro-rs:latest").is_err());
-        assert!(validate_image_ref("docker.io/owner/").is_err());
-        assert!(validate_image_ref("docker.io//kiro-rs:latest").is_err());
-        assert!(validate_image_ref("docker.io/owner/kiro rs:latest").is_err());
-        // 单段、缺少 owner 视为非法
-        assert!(validate_image_ref("kiro-rs").is_err());
+    fn semver_compares_correctly() {
+        use std::cmp::Ordering;
+        assert_eq!(compare_semver("0.3.0", "0.3.1"), Ordering::Less);
+        assert_eq!(compare_semver("v0.3.1", "0.3.1"), Ordering::Equal);
+        assert_eq!(compare_semver("1.0.0", "0.99.99"), Ordering::Greater);
+        assert_eq!(compare_semver("0.3.1-rc.1", "0.3.1"), Ordering::Equal);
     }
 }

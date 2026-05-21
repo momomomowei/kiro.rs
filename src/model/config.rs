@@ -94,17 +94,13 @@ pub struct Config {
     #[serde(default)]
     pub admin_api_key: Option<String>,
 
-    /// 在线更新使用的容器镜像（默认使用 Docker Hub 公开镜像）
-    #[serde(default = "default_update_image")]
-    pub update_image: String,
-
-    /// 上一次成功更新前正在运行的镜像引用，用于在前端展示「回退到 …」
-    /// （回退命令始终通过 `kiro-rs:rollback` 这个本地备份 tag 完成）。
+    /// 上一次成功更新前正在运行的版本号，用于在前端展示「回退到 vX.Y.Z」按钮。
+    /// 实际回退动作通过 `<exe>.backup` 文件完成，无需访问网络。
     #[serde(default)]
-    pub update_previous_image: Option<String>,
+    pub update_previous_version: Option<String>,
 
     /// 是否启用无人值守自动更新。开启后服务会在每天的 `update_auto_apply_time`
-    /// 时刻检查 GitHub Releases，发现新版本即自动调用 `apply_image_update` 重建容器。
+    /// 时刻检查 GitHub Releases，发现新版本即自动下载二进制并替换重启。
     #[serde(default)]
     pub update_auto_apply: bool,
 
@@ -189,10 +185,6 @@ fn default_load_balancing_mode() -> String {
     "priority".to_string()
 }
 
-fn default_update_image() -> String {
-    "zyphrzero/kiro-rs:latest".to_string()
-}
-
 fn default_update_auto_apply_time() -> String {
     "03:00".to_string()
 }
@@ -230,8 +222,7 @@ impl Default for Config {
             proxy_username: None,
             proxy_password: None,
             admin_api_key: None,
-            update_image: default_update_image(),
-            update_previous_image: None,
+            update_previous_version: None,
             update_auto_apply: false,
             update_auto_apply_time: default_update_auto_apply_time(),
             redis_url: None,
@@ -278,12 +269,9 @@ impl Config {
         let mut config: Config = serde_json::from_str(&content)?;
         config.config_path = Some(path.to_path_buf());
 
-        // 用户手工把字符串字段清空（如 `"updateImage": ""`）时，serde 默认值不会
+        // 用户手工把字符串字段清空（如 `"updateAutoApplyTime": ""`）时，serde 默认值不会
         // 介入；这里把"看起来像空"的关键字段回退到默认值，避免后续业务用到
         // 空字符串导致难以诊断的错误。
-        if config.update_image.trim().is_empty() {
-            config.update_image = default_update_image();
-        }
         if config.update_auto_apply_time.trim().is_empty() {
             config.update_auto_apply_time = default_update_auto_apply_time();
         }

@@ -431,7 +431,7 @@ pub async fn set_update_config(
 }
 
 /// POST /api/admin/system/update/pull
-/// 拉取配置的 GHCR 镜像
+/// 下载新版二进制并校验（不替换当前进程）
 pub async fn pull_update_image(State(state): State<AdminState>) -> impl IntoResponse {
     match state.service.pull_update_image().await {
         Ok(response) => Json(response).into_response(),
@@ -440,7 +440,7 @@ pub async fn pull_update_image(State(state): State<AdminState>) -> impl IntoResp
 }
 
 /// POST /api/admin/system/update/apply
-/// 拉取镜像并通过 docker compose 重建服务
+/// 下载新版二进制、替换 exe，进程退出由容器重启策略接管
 pub async fn apply_image_update(State(state): State<AdminState>) -> impl IntoResponse {
     match state.service.apply_image_update().await {
         Ok(response) => Json(response).into_response(),
@@ -449,7 +449,7 @@ pub async fn apply_image_update(State(state): State<AdminState>) -> impl IntoRes
 }
 
 /// POST /api/admin/system/update/rollback
-/// 回退到上一次更新前的镜像版本（使用本地备份 tag，无需联网）
+/// 用 `<exe>.backup` 还原可执行文件并退出进程
 pub async fn rollback_image_update(State(state): State<AdminState>) -> impl IntoResponse {
     match state.service.rollback_image_update().await {
         Ok(response) => Json(response).into_response(),

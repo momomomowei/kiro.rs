@@ -364,17 +364,14 @@ pub struct SetGlobalProxyRequest {
 
 /// 在线更新配置响应
 ///
-/// 镜像默认拉取 Docker Hub 公开镜像，不需要任何凭据；compose 文件路径与
-/// service 名运行时从当前容器的 docker compose 标签自动发现。
+/// 在线更新走"下载 GitHub Releases 二进制 + 进程退出由 docker restart policy 接管"
+/// 的方案，只暴露与版本相关的元信息。
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateConfigResponse {
-    /// Docker Hub 镜像，如 zyphrzero/kiro-rs:latest（留空则用当前运行镜像）
-    pub image: String,
-    /// 上一次成功更新前正在运行的镜像引用；存在时前端可显示「回退」按钮。
-    /// 实际回退使用本地备份 tag `kiro-rs:rollback`，不再访问镜像仓库。
+    /// 上一次成功更新前正在运行的版本号（带 `v` 前缀），存在时前端可显示「回退」按钮。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub previous_image: Option<String>,
+    pub previous_version: Option<String>,
     /// 是否开启无人值守自动更新
     pub auto_apply: bool,
     /// 自动更新触发时间（本地时区，HH:MM 24 小时制）
@@ -385,7 +382,6 @@ pub struct UpdateConfigResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetUpdateConfigRequest {
-    pub image: Option<String>,
     /// 是否开启无人值守自动更新；不传则保持原值
     pub auto_apply: Option<bool>,
     /// 自动更新触发时间（HH:MM）；不传则保持原值
@@ -398,7 +394,6 @@ pub struct SetUpdateConfigRequest {
 pub struct ImageUpdateResponse {
     pub success: bool,
     pub message: String,
-    pub image: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
     pub applied: bool,
@@ -417,7 +412,7 @@ pub struct UpdateCheckInfo {
     pub latest_version: String,
     /// 是否存在新版本
     pub has_update: bool,
-    /// 构建类型；目前固定为 "docker-compose"，前端展示用
+    /// 构建类型；目前固定为 "binary"，前端展示用
     pub build_type: String,
     /// Release 标题（如有）
     #[serde(skip_serializing_if = "Option::is_none")]

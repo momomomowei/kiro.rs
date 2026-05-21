@@ -166,11 +166,10 @@ export interface SetGlobalProxyRequest {
   proxyUrl: string | null
 }
 
-// 镜像在线更新配置
+// 在线更新配置
 export interface UpdateConfigResponse {
-  image: string
-  /** 上一次更新前正在运行的镜像引用；存在时可调用回退接口 */
-  previousImage?: string
+  /** 上一次更新前正在运行的版本号（带 v 前缀）；存在时可调用回退接口 */
+  previousVersion?: string
   /** 是否开启无人值守自动更新 */
   autoApply: boolean
   /** 自动更新触发时间（本地时区，HH:MM 24 小时制） */
@@ -178,7 +177,6 @@ export interface UpdateConfigResponse {
 }
 
 export interface SetUpdateConfigRequest {
-  image?: string
   autoApply?: boolean
   autoApplyTime?: string
 }
@@ -186,7 +184,6 @@ export interface SetUpdateConfigRequest {
 export interface ImageUpdateResponse {
   success: boolean
   message: string
-  image: string
   output?: string
   applied: boolean
   needRestart: boolean

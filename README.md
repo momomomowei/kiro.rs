@@ -218,8 +218,7 @@ docker compose up -d
 | `proxyUsername` | string | - | 代理用户名 |
 | `proxyPassword` | string | - | 代理密码 |
 | `adminApiKey` | string | - | Admin API 密钥，配置后启用凭据管理 API 和 Web 管理界面 |
-| `updateImage` | string | `zyphrzero/kiro-rs:latest` | 在线更新使用的 Docker Hub 镜像，格式 `owner/image:tag` |
-| `updateAutoApply` | boolean | `false` | 是否启用无人值守自动更新；开启后每天到 `updateAutoApplyTime` 自动检查并更新 |
+| `updateAutoApply` | boolean | `false` | 是否启用无人值守自动更新；开启后每天到 `updateAutoApplyTime` 自动从 GitHub Releases 下载新版本二进制并重启 |
 | `updateAutoApplyTime` | string | `03:00` | 自动更新触发时间（本地时区，HH:MM 24 小时制） |
 | `loadBalancingMode` | string | `priority` | 负载均衡模式：`priority`（按优先级）或 `balanced`（均衡分配） |
 | `extractThinking` | boolean | `true` | 非流式响应的 thinking 块提取。启用后 `<thinking>` 标签会被解析为独立的 `thinking` 内容块 |
@@ -247,7 +246,6 @@ docker compose up -d
    "proxyUsername": "user",
    "proxyPassword": "pass",
    "adminApiKey": "sk-admin-your-secret-key",
-   "updateImage": "zyphrzero/kiro-rs:latest",
    "updateAutoApply": false,
    "updateAutoApplyTime": "03:00",
    "loadBalancingMode": "priority",

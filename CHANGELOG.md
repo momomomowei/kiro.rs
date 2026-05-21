@@ -6,12 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-22
+
+### ⚠️ 不兼容变更（Breaking changes）
+
+- **配置字段清理**：`config.json` 删除 `updateImage` 与 `updatePreviousImage` 字段，新增 `updatePreviousVersion`。`updateImage` 在新方案里没有意义（在线更新已不再操作 docker 镜像），保留只会误导。已存在的 `updateImage` 字段会被静默忽略。
+- **Admin API 响应字段调整**：`GET /api/admin/config/update` 返回值移除 `image`，把 `previousImage` 改为 `previousVersion`；`PUT /api/admin/config/update` 不再接受 `image` 参数；`POST /api/admin/system/update/{pull,apply,rollback}` 响应移除 `image` 字段。前端已同步更新。
+- **`docker-compose.yml` 移除 docker socket 与 compose 文件挂载**：在线更新不再需要这两个挂载点。继续使用旧 compose 文件部署也能跑通，但会带着不必要的安全风险。
+
 ### 🛠 在线更新机制改造
 
 - **从「容器自管自重建」改为「文件级二进制替换」**：`apply_image_update` 不再调用 `docker compose pull/up`，改成下载 GitHub Releases 上对应平台的二进制压缩包，校验 `SHA256SUMS.txt`，原子替换 `<exe>`，旧版本备份为 `<exe>.backup`，最后调用 `std::process::exit(0)` 退出，由 `docker-compose.yml` 里的 `restart: unless-stopped` 接管重启。这样从根本上消除了"网络错误时旧容器被停止、新镜像没拉到、服务挂起"的事故路径。
 - **回退也改为文件级**：`rollback_image_update` 从 `<exe>.backup` 还原可执行文件并退出进程，不再依赖 `kiro-rs:rollback` 镜像 tag，断网也能恢复。
-- **移除 docker socket 与 docker CLI 依赖**：`Dockerfile` / `Dockerfile.release` 不再安装 `docker-cli` 与 `docker-cli-compose`；`docker-compose.yml` 删除 `/var/run/docker.sock` 与 `docker-compose.yml` 的挂载。容器逃逸面显著缩小。
-- **前端按钮逻辑保持不变**：「拉取镜像」「更新并重启」「回退到上一版本」按钮位置、名称、操作步骤完全一致；后端在收到请求后做的事情发生了变化，但用户视角不变。
+- **`check_update` 统一走 GitHub Releases API**：取消对 Docker Hub `/v2/repositories/.../tags` 的依赖，单一 endpoint 既拿版本号又拿 changelog，请求次数减半。
+- **移除 docker socket 与 docker CLI 依赖**：`Dockerfile` / `Dockerfile.release` 不再安装 `docker-cli` 与 `docker-cli-compose`；`docker-compose.yml` 删除 `/var/run/docker.sock` 与 `docker-compose.yml` 的挂载。镜像体积更小，容器逃逸面显著缩小。
+- **删除 600+ 行旧逻辑**：`ComposeContext` / `detect_compose_metadata` / `tag_rollback_image` / `validate_image_ref` / `dockerhub_owner_repo` / `DockerHubTagsResponse` 等 docker 相关代码全部移除；`UpdateConfigResponse` / `ImageUpdateResponse` / `SetUpdateConfigRequest` 同步精简。
+- **前端 UI 同步**：「在线更新」对话框移除「镜像」输入框与「保存配置」按钮（这两个控件操作的字段已不存在），保留「拉取镜像」「更新并重启」「回退到上一版本」三大功能按钮的位置、名称、操作流程不变。
 - 配套加 `flate2` / `tar` / `zip` 依赖用于解压 release archive。
 
 ### 🚀 CI/CD 加速
@@ -21,6 +31,12 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - **Docker 镜像复用预编译二进制**：新增 `Dockerfile.release`，CI 里 `build-images` 改为 `needs: build-artifacts`，下载已经构建好的 `Linux-musl-x64` / `Linux-musl-arm64` 二进制后直接 `COPY` 进 alpine，跳过 Dockerfile 内重复的 cargo 编译阶段。开发用 `Dockerfile`、`docker-build.yaml` 仍走完整源码构建。
 - **mold linker（Linux gnu 目标）**：在 `x86_64-unknown-linux-gnu` / `aarch64-unknown-linux-gnu` 矩阵上通过 `rui314/setup-mold@v1` 启用 mold，`RUSTFLAGS=-C link-arg=-fuse-ld=mold`，链接阶段从 5–15s 降至 1–3s。macOS / Windows / musl 目标保持默认链接器以避开兼容性风险。
 - **`cargo build` 全部加 `--locked`**：确保 CI 构建严格按提交的 `Cargo.lock` 解析，避免锁文件漂移导致重复编译。
+
+### 📦 升级指南
+
+1. **保留 docker compose 部署的用户**：直接 `docker compose pull && docker compose up -d` 升到 0.3.1；老 compose 文件里的 `docker.sock` / `docker-compose.yml` 挂载可以从下次 PR 起删掉，不影响功能。
+2. **手动跑二进制的用户**：从 GitHub Releases 下载新版本替换原有二进制即可。
+3. **配置文件清理**：可以从 `data/config.json` 中删除 `updateImage` / `updatePreviousImage` 字段，服务不会再使用它们。
 
 ## [0.3.0] - 2026-05-22
 
