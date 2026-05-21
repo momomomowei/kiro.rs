@@ -25,6 +25,9 @@ import type {
   CompleteSocialLoginRequest,
   GlobalProxyResponse,
   SetGlobalProxyRequest,
+  UpdateConfigResponse,
+  SetUpdateConfigRequest,
+  ImageUpdateResponse,
   UpdateAdminKeyRequest,
 } from '@/types/api'
 
@@ -217,6 +220,30 @@ export async function getGlobalProxy(): Promise<GlobalProxyResponse> {
 // 设置全局代理配置
 export async function setGlobalProxy(req: SetGlobalProxyRequest): Promise<SuccessResponse> {
   const { data } = await api.put<SuccessResponse>('/config/global-proxy', req)
+  return data
+}
+
+// 获取镜像在线更新配置
+export async function getUpdateConfig(): Promise<UpdateConfigResponse> {
+  const { data } = await api.get<UpdateConfigResponse>('/config/update')
+  return data
+}
+
+// 设置镜像在线更新配置
+export async function setUpdateConfig(req: SetUpdateConfigRequest): Promise<UpdateConfigResponse> {
+  const { data } = await api.put<UpdateConfigResponse>('/config/update', req)
+  return data
+}
+
+// 拉取配置的 GHCR 镜像
+export async function pullUpdateImage(): Promise<ImageUpdateResponse> {
+  const { data } = await api.post<ImageUpdateResponse>('/system/update/pull')
+  return data
+}
+
+// 拉取镜像并通过 Docker Compose 应用更新
+export async function applyImageUpdate(): Promise<ImageUpdateResponse> {
+  const { data } = await api.post<ImageUpdateResponse>('/system/update/apply')
   return data
 }
 

@@ -11,9 +11,9 @@ use super::{
     types::{
         AddCredentialRequest, AddProxyRequest, AssignProxyRequest, BatchAddProxyRequest,
         CompleteSocialLoginRequest, GlobalProxyResponse, SetDisabledRequest, SetGlobalProxyRequest,
-        SetLoadBalancingModeRequest, SetPriorityRequest, StartIdcLoginRequest,
-        StartSocialLoginRequest, SuccessResponse, UpdateAdminKeyRequest, UpdateCredentialRequest,
-        UpdateRefreshTokenRequest,
+        SetLoadBalancingModeRequest, SetPriorityRequest, SetUpdateConfigRequest,
+        StartIdcLoginRequest, StartSocialLoginRequest, SuccessResponse, UpdateAdminKeyRequest,
+        UpdateCredentialRequest, UpdateRefreshTokenRequest,
     },
 };
 
@@ -376,6 +376,42 @@ pub async fn set_global_proxy(
 ) -> impl IntoResponse {
     match state.service.set_global_proxy(payload.proxy_url) {
         Ok(_) => Json(SuccessResponse::new("全局代理已更新")).into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}
+
+/// GET /api/admin/config/update
+/// 获取在线更新配置（不回显 GitHub Token 明文）
+pub async fn get_update_config(State(state): State<AdminState>) -> impl IntoResponse {
+    Json(state.service.get_update_config())
+}
+
+/// PUT /api/admin/config/update
+/// 设置在线更新配置
+pub async fn set_update_config(
+    State(state): State<AdminState>,
+    Json(payload): Json<SetUpdateConfigRequest>,
+) -> impl IntoResponse {
+    match state.service.set_update_config(payload) {
+        Ok(response) => Json(response).into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}
+
+/// POST /api/admin/system/update/pull
+/// 拉取配置的 GHCR 镜像
+pub async fn pull_update_image(State(state): State<AdminState>) -> impl IntoResponse {
+    match state.service.pull_update_image() {
+        Ok(response) => Json(response).into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}
+
+/// POST /api/admin/system/update/apply
+/// 拉取镜像并通过 docker compose 重建服务
+pub async fn apply_image_update(State(state): State<AdminState>) -> impl IntoResponse {
+    match state.service.apply_image_update() {
+        Ok(response) => Json(response).into_response(),
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
 }

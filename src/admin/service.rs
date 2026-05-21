@@ -1,7 +1,9 @@
 //! Admin API 业务逻辑服务
 
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
@@ -20,11 +22,11 @@ use super::error::AdminServiceError;
 use super::proxy_pool::{GetUrlResult, ProxyPoolManager};
 use super::types::{
     AddCredentialRequest, AddCredentialResponse, AssignProxyRequest, BalanceResponse,
-    BatchAddProxyRequest, CredentialStatusItem, CredentialsStatusResponse,
+    BatchAddProxyRequest, CredentialStatusItem, CredentialsStatusResponse, ImageUpdateResponse,
     LoadBalancingModeResponse, PollIdcLoginResponse, ProxyPoolEntry, ProxyPoolResponse,
-    SetLoadBalancingModeRequest, StartIdcLoginRequest, StartIdcLoginResponse,
-    StartSocialLoginRequest, StartSocialLoginResponse, UpdateCredentialRequest,
-    UpdateRefreshTokenRequest,
+    SetLoadBalancingModeRequest, SetUpdateConfigRequest, StartIdcLoginRequest,
+    StartIdcLoginResponse, StartSocialLoginRequest, StartSocialLoginResponse, UpdateConfigResponse,
+    UpdateCredentialRequest, UpdateRefreshTokenRequest,
 };
 
 /// 余额缓存过期时间（秒），5 分钟
@@ -39,6 +41,38 @@ struct CachedBalance {
     data: BalanceResponse,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeUpdateConfig {
+    image: String,
+    compose_file: Option<String>,
+    service: String,
+    github_token: Option<String>,
+}
+
+impl RuntimeUpdateConfig {
+    fn from_config(config: &Config) -> Self {
+        Self {
+            image: config.update_image.clone(),
+            compose_file: config.update_compose_file.clone(),
+            service: config.update_service.clone(),
+            github_token: config.github_token.clone(),
+        }
+    }
+
+    fn response(&self) -> UpdateConfigResponse {
+        UpdateConfigResponse {
+            image: self.image.clone(),
+            compose_file: self.compose_file.clone(),
+            service: self.service.clone(),
+            github_token_configured: self
+                .github_token
+                .as_deref()
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false),
+        }
+    }
+}
+
 /// Admin 服务
 ///
 /// 封装所有 Admin API 的业务逻辑
@@ -50,6 +84,8 @@ pub struct AdminService {
     known_endpoints: HashSet<String>,
     /// 代理 IP 池管理器
     proxy_pool: ProxyPoolManager,
+    /// 在线镜像更新运行时配置
+    update_config: Mutex<RuntimeUpdateConfig>,
     /// 进行中的 IdC 设备授权会话
     idc_sessions: Arc<Mutex<HashMap<String, IdcAuthSession>>>,
     /// 进行中的 Social 登录会话
@@ -90,6 +126,147 @@ struct IdcAuthSession {
     relogin_target_id: Option<u64>,
 }
 
+fn validate_image_ref(image: &str) -> Result<(), AdminServiceError> {
+    let value = image.trim();
+    if value.is_empty() {
+        return Err(AdminServiceError::InvalidCredential(
+            "镜像地址不能为空".to_string(),
+        ));
+    }
+    if !value.starts_with("ghcr.io/") {
+        return Err(AdminServiceError::InvalidCredential(
+            "在线更新只支持 GitHub Container Registry 镜像（ghcr.io/...）".to_string(),
+        ));
+    }
+    if value.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(AdminServiceError::InvalidCredential(
+            "镜像地址不能包含空白或控制字符".to_string(),
+        ));
+    }
+    let path_parts: Vec<&str> = value.trim_start_matches("ghcr.io/").split('/').collect();
+    if path_parts.len() < 2 || path_parts.iter().any(|part| part.is_empty()) {
+        return Err(AdminServiceError::InvalidCredential(
+            "镜像地址需使用 ghcr.io/owner/image:tag 格式".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_compose_file(path: &str) -> Result<(), AdminServiceError> {
+    if path.chars().any(|c| c == '\0' || c == '\r' || c == '\n') {
+        return Err(AdminServiceError::InvalidCredential(
+            "compose 文件路径不能包含换行或 NUL 字符".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_compose_service(service: &str) -> Result<(), AdminServiceError> {
+    let value = service.trim();
+    if value.is_empty() {
+        return Err(AdminServiceError::InvalidCredential(
+            "compose service 名称不能为空".to_string(),
+        ));
+    }
+    if !value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+    {
+        return Err(AdminServiceError::InvalidCredential(
+            "compose service 名称只能包含字母、数字、_、-、.".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn ghcr_login_user(image: &str) -> &str {
+    image
+        .trim_start_matches("ghcr.io/")
+        .split('/')
+        .next()
+        .filter(|v| !v.is_empty())
+        .unwrap_or("github")
+}
+
+fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
+    let mut out = String::new();
+    let stdout = String::from_utf8_lossy(stdout);
+    let stderr = String::from_utf8_lossy(stderr);
+    if !stdout.trim().is_empty() {
+        out.push_str(stdout.trim_end());
+        out.push('\n');
+    }
+    if !stderr.trim().is_empty() {
+        out.push_str(stderr.trim_end());
+        out.push('\n');
+    }
+    out
+}
+
+fn run_command_with_env(
+    program: &str,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> Result<String, AdminServiceError> {
+    let mut command = Command::new(program);
+    command.args(args);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+
+    let output = command
+        .output()
+        .map_err(|e| AdminServiceError::InternalError(format!("执行 {} 失败: {}", program, e)))?;
+    let text = command_output_text(&output.stdout, &output.stderr);
+    if !output.status.success() {
+        return Err(AdminServiceError::InternalError(format!(
+            "命令 {} {} 执行失败（{}）: {}",
+            program,
+            args.join(" "),
+            output.status,
+            text.trim()
+        )));
+    }
+    Ok(text)
+}
+
+fn run_command(program: &str, args: &[&str]) -> Result<String, AdminServiceError> {
+    run_command_with_env(program, args, &[])
+}
+
+fn run_docker_login(image: &str, token: &str) -> Result<String, AdminServiceError> {
+    let user = ghcr_login_user(image);
+    let mut child = Command::new("docker")
+        .args(["login", "ghcr.io", "-u", user, "--password-stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| AdminServiceError::InternalError(format!("执行 docker login 失败: {}", e)))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(token.as_bytes()).map_err(|e| {
+            AdminServiceError::InternalError(format!(
+                "写入 GitHub Token 到 docker login 失败: {}",
+                e
+            ))
+        })?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| AdminServiceError::InternalError(format!("等待 docker login 失败: {}", e)))?;
+    let text = command_output_text(&output.stdout, &output.stderr);
+    if !output.status.success() {
+        return Err(AdminServiceError::InternalError(format!(
+            "docker login ghcr.io 失败（{}）: {}",
+            output.status,
+            text.trim()
+        )));
+    }
+    Ok(text)
+}
+
 impl AdminService {
     pub fn new(
         token_manager: Arc<MultiTokenManager>,
@@ -102,6 +279,7 @@ impl AdminService {
         let proxy_pool_path = token_manager.cache_dir().map(|d| d.join("proxy_pool.json"));
 
         let balance_cache = Self::load_balance_cache_from(&cache_path);
+        let update_config = RuntimeUpdateConfig::from_config(token_manager.config());
 
         let svc = Self {
             token_manager,
@@ -109,6 +287,7 @@ impl AdminService {
             cache_path,
             known_endpoints: known_endpoints.into_iter().collect(),
             proxy_pool: ProxyPoolManager::new(proxy_pool_path),
+            update_config: Mutex::new(update_config),
             idc_sessions: Arc::new(Mutex::new(HashMap::new())),
             social_sessions: Arc::new(Mutex::new(HashMap::new())),
         };
@@ -423,6 +602,160 @@ impl AdminService {
     pub fn persist_admin_key(&self, new_key: &str) {
         let key = new_key.to_string();
         self.update_config_file(move |c| c.admin_api_key = Some(key));
+    }
+
+    /// 获取在线更新配置（GitHub Token 只返回是否已配置）
+    pub fn get_update_config(&self) -> UpdateConfigResponse {
+        self.update_config.lock().response()
+    }
+
+    /// 更新在线更新配置。github_token 为空字符串时保留现有 token。
+    pub fn set_update_config(
+        &self,
+        req: SetUpdateConfigRequest,
+    ) -> Result<UpdateConfigResponse, AdminServiceError> {
+        if let Some(image) = &req.image {
+            validate_image_ref(image)?;
+        }
+        if let Some(service) = &req.service {
+            validate_compose_service(service)?;
+        }
+        if let Some(compose_file) = &req.compose_file {
+            validate_compose_file(compose_file)?;
+        }
+
+        {
+            let mut runtime = self.update_config.lock();
+            if let Some(image) = &req.image {
+                runtime.image = image.trim().to_string();
+            }
+            if let Some(compose_file) = &req.compose_file {
+                let trimmed = compose_file.trim();
+                runtime.compose_file = if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                };
+            }
+            if let Some(service) = &req.service {
+                runtime.service = service.trim().to_string();
+            }
+            if let Some(token) = &req.github_token {
+                let trimmed = token.trim();
+                if !trimmed.is_empty() {
+                    runtime.github_token = Some(trimmed.to_string());
+                }
+            }
+        }
+
+        self.update_config_file(move |c| {
+            if let Some(image) = req.image {
+                c.update_image = image.trim().to_string();
+            }
+            if let Some(compose_file) = req.compose_file {
+                let trimmed = compose_file.trim();
+                c.update_compose_file = if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                };
+            }
+            if let Some(service) = req.service {
+                c.update_service = service.trim().to_string();
+            }
+            if let Some(token) = req.github_token {
+                let trimmed = token.trim();
+                if !trimmed.is_empty() {
+                    c.github_token = Some(trimmed.to_string());
+                }
+            }
+        });
+
+        Ok(self.get_update_config())
+    }
+
+    /// 拉取配置中的 GHCR 镜像。若配置 GitHub Token，会先 docker login ghcr.io。
+    pub fn pull_update_image(&self) -> Result<ImageUpdateResponse, AdminServiceError> {
+        let config = self.update_config.lock().clone();
+        let image = config.image.trim().to_string();
+        validate_image_ref(&image)?;
+
+        let mut output = String::new();
+        if let Some(token) = config
+            .github_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            output.push_str(&run_docker_login(&image, token)?);
+        }
+
+        output.push_str(&run_command("docker", &["pull", &image])?);
+
+        Ok(ImageUpdateResponse {
+            success: true,
+            message: "镜像拉取完成".to_string(),
+            image,
+            output: Some(output),
+            applied: false,
+            need_restart: false,
+        })
+    }
+
+    /// 拉取镜像并通过 docker compose 重建服务。
+    ///
+    /// 需要运行环境安装 Docker CLI，并能访问 Docker daemon。容器内使用时通常需要挂载
+    /// /var/run/docker.sock 和 docker-compose.yml。
+    pub fn apply_image_update(&self) -> Result<ImageUpdateResponse, AdminServiceError> {
+        let config = self.update_config.lock().clone();
+        let image = config.image.trim().to_string();
+        validate_image_ref(&image)?;
+
+        let compose_file = config
+            .compose_file
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| {
+                AdminServiceError::InvalidCredential(
+                    "未配置 updateComposeFile，无法在线应用镜像更新".to_string(),
+                )
+            })?;
+
+        let service = config.service.trim();
+        validate_compose_service(service)?;
+
+        let mut output = String::new();
+        if let Some(token) = config
+            .github_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            output.push_str(&run_docker_login(&image, token)?);
+        }
+
+        output.push_str(&run_command("docker", &["pull", &image])?);
+        let compose_env = [("KIRO_RS_IMAGE", image.as_str())];
+        output.push_str(&run_command_with_env(
+            "docker",
+            &["compose", "-f", compose_file, "pull", service],
+            &compose_env,
+        )?);
+        output.push_str(&run_command_with_env(
+            "docker",
+            &["compose", "-f", compose_file, "up", "-d", service],
+            &compose_env,
+        )?);
+
+        Ok(ImageUpdateResponse {
+            success: true,
+            message: "镜像已更新并应用，容器将由 Docker Compose 重建".to_string(),
+            image,
+            output: Some(output),
+            applied: true,
+            need_restart: true,
+        })
     }
 
     /// 获取负载均衡模式
@@ -1324,5 +1657,43 @@ impl AdminService {
             expires_at: expires_at.to_rfc3339(),
             poll_interval,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_ghcr_image_refs() {
+        assert!(validate_image_ref("ghcr.io/owner/kiro-rs:latest").is_ok());
+        assert!(validate_image_ref(" ghcr.io/owner/nested/kiro-rs:v1 ").is_ok());
+
+        assert!(validate_image_ref("").is_err());
+        assert!(validate_image_ref("docker.io/owner/kiro-rs:latest").is_err());
+        assert!(validate_image_ref("ghcr.io/owner").is_err());
+        assert!(validate_image_ref("ghcr.io/owner/").is_err());
+        assert!(validate_image_ref("ghcr.io//kiro-rs:latest").is_err());
+        assert!(validate_image_ref("ghcr.io/owner/kiro rs:latest").is_err());
+    }
+
+    #[test]
+    fn extracts_ghcr_login_owner() {
+        assert_eq!(
+            ghcr_login_user("ghcr.io/ZyphrZero/kiro-rs:latest"),
+            "ZyphrZero"
+        );
+        assert_eq!(ghcr_login_user("ghcr.io/owner/nested/image:tag"), "owner");
+    }
+
+    #[test]
+    fn validates_compose_update_inputs() {
+        assert!(validate_compose_file("/app/config/docker-compose.yml").is_ok());
+        assert!(validate_compose_file("/app/config/docker-compose.yml\n").is_err());
+
+        assert!(validate_compose_service("kiro-rs").is_ok());
+        assert!(validate_compose_service("kiro_rs.1").is_ok());
+        assert!(validate_compose_service("").is_err());
+        assert!(validate_compose_service("kiro-rs;rm").is_err());
     }
 }

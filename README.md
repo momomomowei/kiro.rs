@@ -189,6 +189,10 @@ docker-compose up
 | `proxyUsername` | string | - | 代理用户名 |
 | `proxyPassword` | string | - | 代理密码 |
 | `adminApiKey` | string | - | Admin API 密钥，配置后启用凭据管理 API 和 Web 管理界面 |
+| `githubToken` | string | - | GitHub Token（可选），用于 GHCR 私有镜像拉取或避免 GitHub/GHCR 认证限制 |
+| `updateImage` | string | `ghcr.io/zyphrzero/kiro-rs:latest` | 在线更新使用的 GHCR 镜像 |
+| `updateComposeFile` | string | - | 在线更新使用的 Docker Compose 文件路径；容器部署通常为 `/app/config/docker-compose.yml` |
+| `updateService` | string | `kiro-rs` | 在线更新时重建的 Docker Compose service 名称 |
 | `loadBalancingMode` | string | `priority` | 负载均衡模式：`priority`（按优先级）或 `balanced`（均衡分配） |
 | `extractThinking` | boolean | `true` | 非流式响应的 thinking 块提取。启用后 `<thinking>` 标签会被解析为独立的 `thinking` 内容块 |
 | `defaultEndpoint` | string | `ide` | 默认 Kiro 端点。凭据未显式指定 `endpoint` 时使用。可选值：`ide`（Kiro IDE）、`cli`（Amazon Q for CLI，适用于 `ksk_` 前缀的 API Key） |
@@ -215,6 +219,10 @@ docker-compose up
    "proxyUsername": "user",
    "proxyPassword": "pass",
    "adminApiKey": "sk-admin-your-secret-key",
+   "githubToken": "<your-github-token>",
+   "updateImage": "ghcr.io/zyphrzero/kiro-rs:latest",
+   "updateComposeFile": "/app/config/docker-compose.yml",
+   "updateService": "kiro-rs",
    "loadBalancingMode": "priority",
    "extractThinking": true
 }
@@ -459,6 +467,25 @@ RUST_LOG=debug ./target/release/kiro-rs
 
 - **Admin UI**
   - `GET /admin` - 访问管理页面（需要在编译前构建 `admin-ui/dist`）
+
+### 在线更新镜像
+
+Admin UI 顶部的“镜像在线更新”入口支持：
+
+- 保存 GHCR 镜像地址和 GitHub Token（Token 不会在接口中回显明文）
+- 执行 `docker pull <updateImage>` 拉取 GitHub Container Registry 镜像
+- 在配置 `updateComposeFile` 和 `updateService` 后执行 `docker compose pull/up -d` 重建服务
+
+容器部署时需要让容器能够访问宿主机 Docker daemon。默认 `docker-compose.yml` 已示例挂载：
+
+```yaml
+volumes:
+  - ./config/:/app/config/
+  - ./docker-compose.yml:/app/config/docker-compose.yml:ro
+  - /var/run/docker.sock:/var/run/docker.sock
+```
+
+只支持 `ghcr.io/...` 镜像。项目的 GitHub Actions 会发布到 GitHub Container Registry，不依赖 Docker Hub。
 
 ## 注意事项
 

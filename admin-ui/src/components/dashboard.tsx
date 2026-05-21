@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { RefreshCw, LogOut, Moon, Sun, Server, Plus, Upload, FileUp, Trash2, RotateCcw, CheckCircle2, Globe, LogIn, Key, Settings } from 'lucide-react'
+import { RefreshCw, LogOut, Moon, Sun, Server, Plus, Upload, FileUp, Trash2, RotateCcw, CheckCircle2, Globe, LogIn, Key, Settings, UploadCloud } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { storage } from '@/lib/storage'
@@ -24,6 +24,7 @@ import { SocialLoginDialog } from '@/components/social-login-dialog'
 import { KamImportDialog } from '@/components/kam-import-dialog'
 import { BatchVerifyDialog, type VerifyResult } from '@/components/batch-verify-dialog'
 import { ProxyPoolDialog } from '@/components/proxy-pool-dialog'
+import { ImageUpdateDialog } from '@/components/image-update-dialog'
 import { useCredentials, useDeleteCredential, useResetFailure, useLoadBalancingMode, useSetLoadBalancingMode, useResetAllSuccessCount } from '@/hooks/use-credentials'
 import { getCredentialBalance, forceRefreshToken, updateAdminKey } from '@/api/credentials'
 import { extractErrorMessage } from '@/lib/utils'
@@ -42,6 +43,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
   const [socialLoginDialogOpen, setSocialLoginDialogOpen] = useState(false)
   const [kamImportDialogOpen, setKamImportDialogOpen] = useState(false)
   const [proxyPoolDialogOpen, setProxyPoolDialogOpen] = useState(false)
+  const [imageUpdateDialogOpen, setImageUpdateDialogOpen] = useState(false)
   const [adminKeyDialogOpen, setAdminKeyDialogOpen] = useState(false)
   const [newAdminKey, setNewAdminKey] = useState('')
   const [updatingAdminKey, setUpdatingAdminKey] = useState(false)
@@ -603,6 +605,14 @@ export function Dashboard({ onLogout }: DashboardProps) {
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => setImageUpdateDialogOpen(true)}
+              title="镜像在线更新"
+            >
+              <UploadCloud className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => { setNewAdminKey(''); setAdminKeyDialogOpen(true) }}
               title="修改 Admin API Key"
             >
@@ -866,6 +876,12 @@ export function Dashboard({ onLogout }: DashboardProps) {
       <ProxyPoolDialog
         open={proxyPoolDialogOpen}
         onOpenChange={setProxyPoolDialogOpen}
+      />
+
+      {/* 镜像在线更新对话框 */}
+      <ImageUpdateDialog
+        open={imageUpdateDialogOpen}
+        onOpenChange={setImageUpdateDialogOpen}
       />
 
       {/* 批量验活对话框 */}

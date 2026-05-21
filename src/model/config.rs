@@ -94,6 +94,22 @@ pub struct Config {
     #[serde(default)]
     pub admin_api_key: Option<String>,
 
+    /// GitHub Token（可选，用于 GHCR 私有镜像拉取和规避 GitHub API 限流）
+    #[serde(default)]
+    pub github_token: Option<String>,
+
+    /// 在线更新使用的容器镜像（默认使用 GitHub Container Registry）
+    #[serde(default = "default_update_image")]
+    pub update_image: String,
+
+    /// 在线更新使用的 docker compose 文件路径（容器内需要挂载 Docker socket 和 compose 文件）
+    #[serde(default)]
+    pub update_compose_file: Option<String>,
+
+    /// 在线更新重建的 docker compose service 名称
+    #[serde(default = "default_update_service")]
+    pub update_service: String,
+
     /// Redis 连接 URL（可选，启用缓存功能）
     #[serde(default)]
     pub redis_url: Option<String>,
@@ -170,6 +186,14 @@ fn default_load_balancing_mode() -> String {
     "priority".to_string()
 }
 
+fn default_update_image() -> String {
+    "ghcr.io/zyphrzero/kiro-rs:latest".to_string()
+}
+
+fn default_update_service() -> String {
+    "kiro-rs".to_string()
+}
+
 fn default_cache_max_read_ratio() -> CacheMaxReadRatio {
     CacheMaxReadRatio::Fixed(1.0)
 }
@@ -203,6 +227,10 @@ impl Default for Config {
             proxy_username: None,
             proxy_password: None,
             admin_api_key: None,
+            github_token: None,
+            update_image: default_update_image(),
+            update_compose_file: None,
+            update_service: default_update_service(),
             redis_url: None,
             cache_debug_logging: false,
             cache_max_read_ratio: default_cache_max_read_ratio(),

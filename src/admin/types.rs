@@ -295,6 +295,46 @@ pub struct SetGlobalProxyRequest {
     pub proxy_url: Option<String>,
 }
 
+// ============ 在线更新配置 ============
+
+/// 在线更新配置响应（GitHub Token 不回显明文）
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateConfigResponse {
+    /// GHCR 镜像，如 ghcr.io/owner/kiro-rs:latest
+    pub image: String,
+    /// docker compose 文件路径；配置后可在线执行 compose pull/up
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compose_file: Option<String>,
+    /// docker compose service 名称
+    pub service: String,
+    /// 是否已配置 GitHub Token
+    pub github_token_configured: bool,
+}
+
+/// 更新在线更新配置；github_token 为空字符串时保留现有 token
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetUpdateConfigRequest {
+    pub image: Option<String>,
+    pub compose_file: Option<String>,
+    pub service: Option<String>,
+    pub github_token: Option<String>,
+}
+
+/// 在线更新操作结果
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageUpdateResponse {
+    pub success: bool,
+    pub message: String,
+    pub image: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    pub applied: bool,
+    pub need_restart: bool,
+}
+
 // ============ Admin API Key 修改 ============
 
 /// 修改 Admin API Key 请求

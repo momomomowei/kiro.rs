@@ -152,6 +152,30 @@ export interface SetGlobalProxyRequest {
   proxyUrl: string | null
 }
 
+// 镜像在线更新配置
+export interface UpdateConfigResponse {
+  image: string
+  composeFile?: string
+  service: string
+  githubTokenConfigured: boolean
+}
+
+export interface SetUpdateConfigRequest {
+  image?: string
+  composeFile?: string
+  service?: string
+  githubToken?: string
+}
+
+export interface ImageUpdateResponse {
+  success: boolean
+  message: string
+  image: string
+  output?: string
+  applied: boolean
+  needRestart: boolean
+}
+
 // Admin Key 修改
 export interface UpdateAdminKeyRequest {
   newKey: string
