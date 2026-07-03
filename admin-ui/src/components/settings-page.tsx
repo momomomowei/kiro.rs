@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Boxes, Plus, Power, RefreshCw, Sparkles, Timer, Trash2 } from 'lucide-react'
+import { Boxes, Plus, Power, Sparkles, Timer, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -8,7 +8,6 @@ import {
   useKvCacheConfig,
   useModelCache,
   useModelsConfig,
-  useRefreshAllModels,
   useRestartService,
   useSetKvCacheConfig,
   useSetModelsConfig,
@@ -147,7 +146,6 @@ function ModelsPanel() {
   const { data, isLoading } = useModelsConfig()
   const { data: modelCache } = useModelCache()
   const saveModels = useSetModelsConfig()
-  const refreshModels = useRefreshAllModels()
   const restart = useRestartService()
   const [models, setModels] = useState<ModelEntry[]>([])
   const [dirty, setDirty] = useState(false)
@@ -187,17 +185,6 @@ function ModelsPanel() {
     })
   }
 
-  const handleRefreshModels = () => {
-    refreshModels.mutate(undefined, {
-      onSuccess: (res) => {
-        const message = `模型缓存刷新完成：${res.count} 个模型，成功 ${res.refreshed}，失败 ${res.failed}`
-        if (res.failed > 0) toast.warning(message)
-        else toast.success(message)
-      },
-      onError: (err) => toast.error('刷新失败: ' + extractErrorMessage(err)),
-    })
-  }
-
   const cachedAt = modelCache?.cachedAt
     ? new Date(modelCache.cachedAt * 1000).toLocaleString()
     : '尚未刷新'
@@ -207,7 +194,7 @@ function ModelsPanel() {
     <section>
       <Card>
         <CardContent className="space-y-4 p-5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
                 <Boxes className="h-4 w-4 text-primary" />
@@ -219,28 +206,16 @@ function ModelsPanel() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefreshModels}
-                disabled={refreshModels.isPending}
-                title="从所有已启用凭据拉取上游可用模型"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshModels.isPending ? 'animate-spin' : ''}`} />
-                {refreshModels.isPending ? '刷新中…' : '刷新缓存'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRestart}
-                disabled={restart.isPending}
-                title="让外部守护进程拉起服务"
-              >
-                <Power className="h-3.5 w-3.5" />
-                {restart.isPending ? '重启中…' : '重启服务'}
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRestart}
+              disabled={restart.isPending}
+              title="让外部守护进程拉起服务"
+            >
+              <Power className="h-3.5 w-3.5" />
+              {restart.isPending ? '重启中…' : '重启服务'}
+            </Button>
           </div>
 
           <div className="grid gap-2 text-[12px] text-muted-foreground sm:grid-cols-3">

@@ -94,6 +94,7 @@ import {
   useSetLoadBalancingMode,
   useResetAllSuccessCount,
   useSetPriority,
+  useRefreshCredentialModels,
 } from "@/hooks/use-credentials";
 import { useUpdateCheck } from "@/hooks/use-update-check";
 import { useFailureStats } from "@/hooks/use-traces";
@@ -206,6 +207,11 @@ export function Dashboard({ onLogout, embedded = false }: DashboardProps) {
     current: 0,
     total: 0,
   });
+  const [modelRefreshing, setModelRefreshing] = useState(false);
+  const [modelRefreshProgress, setModelRefreshProgress] = useState({
+    current: 0,
+    total: 0,
+  });
   const cancelVerifyRef = useRef(false);
   const [currentPage, setCurrentPage] = useState(1);
   // 展示形态（卡片 / 列表）与每页数量，均持久化到 localStorage
@@ -235,6 +241,7 @@ export function Dashboard({ onLogout, embedded = false }: DashboardProps) {
   const { data, isLoading, error, refetch } = useCredentials();
   const { mutate: deleteCredential } = useDeleteCredential();
   const { mutate: resetFailure } = useResetFailure();
+  const refreshCredentialModels = useRefreshCredentialModels();
   const { data: loadBalancingData, isLoading: isLoadingMode } =
     useLoadBalancingMode();
   const { mutate: setLoadBalancingMode, isPending: isSettingMode } =
@@ -617,6 +624,38 @@ export function Dashboard({ onLogout, embedded = false }: DashboardProps) {
     if (f === 0) toast.success(`成功刷新 ${s} 个凭据的 Token`);
     else toast.warning(`刷新 Token：成功 ${s} 个，失败 ${f} 个`);
     deselectAll();
+  };
+
+  const handleBatchRefreshModels = async () => {
+    if (selectedIds.size === 0) {
+      toast.error("请先选择要刷新模型缓存的凭据");
+      return;
+    }
+    const enabledIds = Array.from(selectedIds).filter((id) => {
+      const c = data?.credentials.find((x) => x.id === id);
+      return c && !c.disabled;
+    });
+    if (enabledIds.length === 0) {
+      toast.error("选中的凭据中没有启用的凭据");
+      return;
+    }
+
+    setModelRefreshing(true);
+    setModelRefreshProgress({ current: 0, total: enabledIds.length });
+    let s = 0;
+    let f = 0;
+    for (let i = 0; i < enabledIds.length; i++) {
+      try {
+        await refreshCredentialModels.mutateAsync(enabledIds[i]);
+        s++;
+      } catch {
+        f++;
+      }
+      setModelRefreshProgress({ current: i + 1, total: enabledIds.length });
+    }
+    setModelRefreshing(false);
+    if (f === 0) toast.success(`模型缓存刷新完成：成功 ${s} 个凭据`);
+    else toast.warning(`模型缓存刷新完成：成功 ${s} 个，失败 ${f} 个`);
   };
 
   const handleClearAll = async () => {
@@ -1510,10 +1549,25 @@ export function Dashboard({ onLogout, embedded = false }: DashboardProps) {
                     size="sm"
                     variant="destructive"
                     className="w-full sm:w-auto"
-                    disabled={selectedIds.size === 0}
+                    disabled={selectedIds.size === 0 || modelRefreshing}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     删除
+                  </Button>
+                  <Button
+                    onClick={handleBatchRefreshModels}
+                    size="sm"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    disabled={selectedIds.size === 0 || modelRefreshing}
+                    title="为已选启用凭据刷新上游模型缓存"
+                  >
+                    <RefreshCw
+                      className={modelRefreshing ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"}
+                    />
+                    {modelRefreshing
+                      ? `刷新中… ${modelRefreshProgress.current}/${modelRefreshProgress.total}`
+                      : "刷新模型缓存"}
                   </Button>
                   <span className="mx-1 hidden h-5 w-px bg-border/70 sm:inline-block" />
                 </>

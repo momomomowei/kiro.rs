@@ -42,15 +42,6 @@ pub fn get_models() -> Vec<UpstreamModel> {
     cache().read().models.clone()
 }
 
-pub fn get_account_models(account_id: u64) -> Vec<String> {
-    cache()
-        .read()
-        .account_models
-        .get(&account_id)
-        .cloned()
-        .unwrap_or_default()
-}
-
 pub fn set_account_models(account_id: u64, models: Vec<UpstreamModel>) {
     let mut cache = cache().write();
     cache.account_models.insert(
