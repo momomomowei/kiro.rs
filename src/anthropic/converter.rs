@@ -146,11 +146,13 @@ pub fn map_model(model: &str) -> Option<String> {
 
 pub fn map_model_with_config(model: &str, models: &[ModelEntry]) -> Option<String> {
     let model_lower = model.to_lowercase();
-    models
-        .iter()
-        .find(|entry| entry.matches(&model_lower))
-        .map(|entry| entry.kiro_model_id.clone())
-        .or_else(|| super::model_cache::map_model(model))
+    super::model_cache::map_model(model)
+        .or_else(|| {
+            models
+                .iter()
+                .find(|entry| entry.matches(&model_lower))
+                .map(|entry| entry.kiro_model_id.clone())
+        })
         .or_else(|| map_model_builtin(model))
 }
 
@@ -215,11 +217,11 @@ pub fn get_context_window_size(model: &str) -> i32 {
 
 pub fn get_context_window_size_with_config(model: &str, models: &[ModelEntry]) -> i32 {
     let model_lower = model.to_lowercase();
-    if let Some(entry) = models.iter().find(|entry| entry.matches(&model_lower)) {
-        return entry.context_window.max(1);
-    }
     if let Some(window) = super::model_cache::context_window_for(model) {
         return window.max(1);
+    }
+    if let Some(entry) = models.iter().find(|entry| entry.matches(&model_lower)) {
+        return entry.context_window.max(1);
     }
 
     match map_model(model) {
