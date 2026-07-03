@@ -110,15 +110,31 @@ impl CacheUsage {
         let cache_total = ((total as f64) * ratio).round() as i32;
         let cache_total = cache_total.min(total);
         // 在缓存覆盖部分内部，按 estimate 口径的 read/creation 占比二次拆分。
-        let read = if self.cache_covered_est > 0 {
-            let raw = (cache_total as f64) * (self.cache_read as f64 / self.cache_covered_est as f64);
-            (raw * get_cache_read_efficiency()).round() as i32
+        let efficiency = get_cache_read_efficiency();
+        let raw_read = if self.cache_covered_est > 0 {
+            (cache_total as f64) * (self.cache_read as f64 / self.cache_covered_est as f64)
         } else {
-            0
+            0.0
         };
+        let read = (raw_read * efficiency).round() as i32;
         let read = read.clamp(0, cache_total);
         let creation = cache_total - read;
         let input = total - cache_total;
+        if cache_total > 0 {
+            tracing::info!(
+                total_real = total,
+                prompt_total_est = self.prompt_total_est,
+                cache_covered_est = self.cache_covered_est,
+                cache_read_est = self.cache_read,
+                cache_total_tokens = cache_total,
+                raw_cache_read_tokens = raw_read.round() as i32,
+                cache_read_efficiency = efficiency,
+                final_cache_read_tokens = read,
+                cache_creation_tokens = creation,
+                input_tokens = input,
+                "KV Cache 计量"
+            );
+        }
         (input, creation, read)
     }
 }
