@@ -277,10 +277,11 @@ export function useModelsConfig() {
   })
 }
 
-export function useModelCache() {
+export function useModelCache(enabled = true) {
   return useQuery({
     queryKey: ['modelCache'],
     queryFn: getModelCache,
+    enabled,
     refetchInterval: 30000,
   })
 }

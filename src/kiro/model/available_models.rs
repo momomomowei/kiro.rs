@@ -2,7 +2,7 @@
 //!
 //! 包含 ListAvailableModels API 的响应类型定义。
 //!
-//! 上游接口：`GET https://q.{api_region}.amazonaws.com/ListAvailableModels?origin=AI_EDITOR`
+//! 上游接口：`GET https://q.{api_region}.amazonaws.com/ListAvailableModels?origin=AI_EDITOR&maxResults=50`
 //! 返回该凭据（按订阅等级）当前真实可用的模型列表。
 
 use serde::{Deserialize, Serialize};

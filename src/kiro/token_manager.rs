@@ -437,7 +437,7 @@ pub(crate) async fn get_usage_limits(
 
 /// 获取该凭据当前可用的模型列表
 ///
-/// 上游接口：`GET https://q.{api_region}.amazonaws.com/ListAvailableModels?origin=AI_EDITOR`
+/// 上游接口：`GET https://q.{api_region}.amazonaws.com/ListAvailableModels?origin=AI_EDITOR&maxResults=50`
 /// 返回值随订阅等级不同而不同（如 FREE 账号不含 Opus）。
 /// 请求头与构造方式与 [`get_usage_limits`] 完全一致。
 pub(crate) async fn get_available_models(
@@ -476,7 +476,7 @@ pub(crate) async fn get_available_models(
     for (idx, region) in candidates.iter().enumerate() {
         let host = format!("q.{}.amazonaws.com", region);
         let url = format!(
-            "https://{}/ListAvailableModels?origin=AI_EDITOR{}",
+            "https://{}/ListAvailableModels?origin=AI_EDITOR&maxResults=50{}",
             host, profile_arn_query
         );
 

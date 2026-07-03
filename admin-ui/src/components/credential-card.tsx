@@ -14,6 +14,7 @@ import {
   Clock,
   ScrollText,
   Boxes,
+  Database,
   Wallet,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,6 +60,7 @@ import { UpdateTokenDialog } from "@/components/update-token-dialog";
 import { ReloginDialog } from "@/components/relogin-dialog";
 import { CredentialFailuresDialog } from "@/components/credential-failures-dialog";
 import { AvailableModelsDialog } from "@/components/available-models-dialog";
+import { CachedModelsDialog } from "@/components/cached-models-dialog";
 
 interface CredentialCardProps {
   credential: CredentialStatusItem;
@@ -207,6 +209,7 @@ export function CredentialCard({
   const [showReloginDialog, setShowReloginDialog] = useState(false);
   const [showFailuresDialog, setShowFailuresDialog] = useState(false);
   const [showModelsDialog, setShowModelsDialog] = useState(false);
+  const [showCachedModelsDialog, setShowCachedModelsDialog] = useState(false);
 
   const setDisabled = useSetDisabled();
   const setPriority = useSetPriority();
@@ -472,6 +475,10 @@ export function CredentialCard({
         >
           <Boxes />
           查看可用模型
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setShowCachedModelsDialog(true)}>
+          <Database />
+          查看已缓存模型
         </DropdownMenuItem>
         {throttleRemaining > 0 && (
           <DropdownMenuItem
@@ -814,7 +821,7 @@ export function CredentialCard({
         className={`group flex h-full min-w-0 flex-col ${
           isDragging
             ? "shadow-apple-lg opacity-80"
-            : "hover:-translate-y-0.5 hover:shadow-apple-lg"
+            : "hover:shadow-apple-lg"
         } ${stateClasses}`}
       >
         <CardHeader className="p-4 pb-3 sm:p-5 sm:pb-3">
@@ -1174,6 +1181,11 @@ export function CredentialCard({
         open={showModelsDialog}
         onOpenChange={setShowModelsDialog}
         credentialId={showModelsDialog ? credential.id : null}
+      />
+      <CachedModelsDialog
+        open={showCachedModelsDialog}
+        onOpenChange={setShowCachedModelsDialog}
+        credentialId={showCachedModelsDialog ? credential.id : null}
       />
     </>
   );
