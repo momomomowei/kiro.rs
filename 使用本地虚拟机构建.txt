@@ -1,0 +1,14 @@
+用本地虚拟机来构建
+cd /opt/1panel/apps/
+
+克隆代码
+NO_PROXY=localhost,127.0.0.1,192.168.44.130 no_proxy=localhost,127.0.0.1,192.168.44.130 git clone http://192.168.44.130:3000/mo/kiro.rs.git
+
+拉取代码
+NO_PROXY=localhost,127.0.0.1,192.168.44.130 no_proxy=localhost,127.0.0.1,192.168.44.130 git pull
+
+进入目录
+cd /opt/1panel/apps/kiro.rs/
+
+构建代码
+docker compose -f docker-compose.local.yml up -d --build
