@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::model::config::ModelEntry;
 use crate::kiro::model::requests::conversation::{
     AssistantMessage, ConversationState, CurrentMessage, HistoryAssistantMessage,
     HistoryUserMessage, KiroImage, Message, UserInputMessage, UserInputMessageContext, UserMessage,
@@ -139,8 +140,21 @@ Complete all chunked operations without commentary.";
 /// 模型映射：将 Anthropic 模型名映射到 Kiro 模型 ID
 /// 严格对照版本号
 pub fn map_model(model: &str) -> Option<String> {
-    let model_lower = model.to_lowercase();
+    let configured = super::model_registry::get_models();
+    map_model_with_config(model, &configured)
+}
 
+pub fn map_model_with_config(model: &str, models: &[ModelEntry]) -> Option<String> {
+    let model_lower = model.to_lowercase();
+    models
+        .iter()
+        .find(|entry| entry.matches(&model_lower))
+        .map(|entry| entry.kiro_model_id.clone())
+        .or_else(|| map_model_builtin(model))
+}
+
+fn map_model_builtin(model: &str) -> Option<String> {
+    let model_lower = model.to_lowercase();
     if model_lower.contains("sonnet") {
         if model_lower.contains("4-8") || model_lower.contains("4.8") {
             Some("claude-sonnet-4.8".to_string())
@@ -176,6 +190,16 @@ pub fn map_model(model: &str) -> Option<String> {
 /// Kiro 于 2026-03-24 将 Opus 4.6 和 Sonnet 4.6 升级至 1M 上下文。
 /// 4.7 / 4.8 同 1M
 pub fn get_context_window_size(model: &str) -> i32 {
+    let configured = super::model_registry::get_models();
+    get_context_window_size_with_config(model, &configured)
+}
+
+pub fn get_context_window_size_with_config(model: &str, models: &[ModelEntry]) -> i32 {
+    let model_lower = model.to_lowercase();
+    if let Some(entry) = models.iter().find(|entry| entry.matches(&model_lower)) {
+        return entry.context_window.max(1);
+    }
+
     match map_model(model) {
         Some(mapped)
             if mapped == "claude-sonnet-4.6"

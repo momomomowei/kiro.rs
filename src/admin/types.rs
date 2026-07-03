@@ -459,6 +459,38 @@ pub struct SetLogGovernanceConfigRequest {
     pub usage_log_retention_days: Option<u32>,
 }
 
+/// KV Cache 配置响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KvCacheConfigResponse {
+    pub cache_read_efficiency: f64,
+    pub kv_cache_ttl_secs: i64,
+}
+
+/// 更新 KV Cache 配置
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetKvCacheConfigRequest {
+    #[serde(default)]
+    pub cache_read_efficiency: Option<f64>,
+    #[serde(default)]
+    pub kv_cache_ttl_secs: Option<i64>,
+}
+
+/// 模型配置响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelsConfigResponse {
+    pub models: Vec<crate::model::config::ModelEntry>,
+}
+
+/// 更新模型配置
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetModelsRequest {
+    pub models: Vec<crate::model::config::ModelEntry>,
+}
+
 // ============ 代理池 ============
 
 /// 代理池条目

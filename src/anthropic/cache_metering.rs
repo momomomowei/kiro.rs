@@ -22,14 +22,32 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// 默认条目上限（防止内存无限增长）
 const DEFAULT_CAPACITY: usize = 4096;
-/// 最长 TTL（1h，与 Anthropic ttl="1h" 对齐）
-const MAX_TTL_SECS: i64 = 3600;
-/// 默认 TTL（5min，ephemeral 默认值）
-const DEFAULT_TTL_SECS: i64 = 5 * 60;
+/// 管理面板允许的最大 TTL（1 天）。
+const MAX_CONFIG_TTL_SECS: i64 = 86_400;
+static CACHE_CONFIG: OnceLock<Mutex<(f64, i64)>> = OnceLock::new();
+
+fn cache_config() -> &'static Mutex<(f64, i64)> {
+    CACHE_CONFIG.get_or_init(|| Mutex::new((0.9, 1800)))
+}
+
+pub fn set_kv_cache_config(cache_read_efficiency: f64, kv_cache_ttl_secs: i64) {
+    *cache_config().lock() = (
+        cache_read_efficiency.clamp(0.0, 1.0),
+        kv_cache_ttl_secs.max(60),
+    );
+}
+
+pub fn get_cache_read_efficiency() -> f64 {
+    cache_config().lock().0
+}
+
+pub fn get_kv_cache_ttl_secs() -> i64 {
+    cache_config().lock().1
+}
 
 /// 单个缓存条目
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,8 +111,8 @@ impl CacheUsage {
         let cache_total = cache_total.min(total);
         // 在缓存覆盖部分内部，按 estimate 口径的 read/creation 占比二次拆分。
         let read = if self.cache_covered_est > 0 {
-            ((cache_total as f64) * (self.cache_read as f64 / self.cache_covered_est as f64)).round()
-                as i32
+            let raw = (cache_total as f64) * (self.cache_read as f64 / self.cache_covered_est as f64);
+            (raw * get_cache_read_efficiency()).round() as i32
         } else {
             0
         };
@@ -167,10 +185,11 @@ impl CacheMeter {
         out
     }
 
-    /// 把一组前缀段写入缓存（用于 miss 后登记 / 续期）。`ttl_secs` clip 到 [60, MAX_TTL_SECS]。
+    /// 把一组前缀段写入缓存（用于 miss 后登记 / 续期）。`ttl_secs` clip 到配置 TTL。
     pub fn record(&self, segment_hashes: &[u64], segment_tokens: &[u32], ttl_secs: i64) {
         debug_assert_eq!(segment_hashes.len(), segment_tokens.len());
-        let ttl = ttl_secs.clamp(60, MAX_TTL_SECS);
+        let max_ttl = get_kv_cache_ttl_secs().clamp(60, MAX_CONFIG_TTL_SECS);
+        let ttl = ttl_secs.clamp(60, max_ttl);
         let now = now_secs();
         let expires_at = now + ttl;
         let mut inner = self.inner.lock();
@@ -274,7 +293,7 @@ pub fn parse_ttl(ttl: Option<&str>) -> i64 {
     match ttl {
         Some(s) if s.eq_ignore_ascii_case("1h") => 3600,
         Some(s) if s.eq_ignore_ascii_case("5m") => 300,
-        _ => DEFAULT_TTL_SECS,
+        _ => get_kv_cache_ttl_secs().clamp(60, MAX_CONFIG_TTL_SECS),
     }
 }
 
@@ -544,9 +563,9 @@ fn extract_session_id(user_id: &str) -> Option<String> {
 }
 
 /// 探测请求里出现过的最大 cache_control.ttl（"1h" 优先于 "5m"）；
-/// 无任何 cache_control 时返回默认 5m。决定写入缓存段的存活时长。
+/// 无任何 cache_control 时返回运行时配置 TTL。决定写入缓存段的存活时长。
 fn detect_max_ttl(req: &MessagesRequest) -> i64 {
-    let mut ttl = DEFAULT_TTL_SECS;
+    let mut ttl = get_kv_cache_ttl_secs().clamp(60, MAX_CONFIG_TTL_SECS);
     let mut bump = |cc: Option<&CacheControl>| {
         if let Some(cc) = cc {
             ttl = ttl.max(parse_ttl(cc.ttl.as_deref()));

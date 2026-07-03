@@ -18,10 +18,15 @@ import {
   setAccountThrottleConfig,
   getLogGovernanceConfig,
   setLogGovernanceConfig,
+  getKvCacheConfig,
+  setKvCacheConfig,
+  getModelsConfig,
+  setModelsConfig,
+  restartService,
   resetSuccessCount,
   resetAllSuccessCount,
 } from '@/api/credentials'
-import type { AddCredentialRequest, UpdateCredentialRequest, UpdateRefreshTokenRequest } from '@/types/api'
+import type { AddCredentialRequest, KvCacheConfig, ModelEntry, UpdateCredentialRequest, UpdateRefreshTokenRequest } from '@/types/api'
 
 // 查询凭据列表
 export function useCredentials() {
@@ -231,5 +236,45 @@ export function useSetLogGovernanceConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['logGovernanceConfig'] })
     },
+  })
+}
+
+export function useKvCacheConfig() {
+  return useQuery({
+    queryKey: ['kvCacheConfig'],
+    queryFn: getKvCacheConfig,
+  })
+}
+
+export function useSetKvCacheConfig() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (config: Partial<KvCacheConfig>) => setKvCacheConfig(config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kvCacheConfig'] })
+    },
+  })
+}
+
+export function useModelsConfig() {
+  return useQuery({
+    queryKey: ['modelsConfig'],
+    queryFn: getModelsConfig,
+  })
+}
+
+export function useSetModelsConfig() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (models: ModelEntry[]) => setModelsConfig(models),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelsConfig'] })
+    },
+  })
+}
+
+export function useRestartService() {
+  return useMutation({
+    mutationFn: restartService,
   })
 }

@@ -35,6 +35,9 @@ import type {
   UpdateCheckInfo,
   GitHubRateLimitInfo,
   UpdateAdminKeyRequest,
+  KvCacheConfig,
+  ModelEntry,
+  ModelsConfig,
 } from '@/types/api'
 
 // 创建 axios 实例
@@ -164,6 +167,31 @@ export async function getCredentialBalance(id: number): Promise<BalanceResponse>
 // 获取凭据当前可用的模型列表（按需实时查询上游）
 export async function getCredentialModels(id: number): Promise<AvailableModelsResponse> {
   const { data } = await api.get<AvailableModelsResponse>(`/credentials/${id}/models`)
+  return data
+}
+
+export async function getKvCacheConfig(): Promise<KvCacheConfig> {
+  const { data } = await api.get<KvCacheConfig>('/config/kv-cache')
+  return data
+}
+
+export async function setKvCacheConfig(config: Partial<KvCacheConfig>): Promise<KvCacheConfig> {
+  const { data } = await api.put<KvCacheConfig>('/config/kv-cache', config)
+  return data
+}
+
+export async function getModelsConfig(): Promise<ModelsConfig> {
+  const { data } = await api.get<ModelsConfig>('/config/models')
+  return data
+}
+
+export async function setModelsConfig(models: ModelEntry[]): Promise<ModelsConfig> {
+  const { data } = await api.put<ModelsConfig>('/config/models', { models })
+  return data
+}
+
+export async function restartService(): Promise<SuccessResponse> {
+  const { data } = await api.post<SuccessResponse>('/restart')
   return data
 }
 

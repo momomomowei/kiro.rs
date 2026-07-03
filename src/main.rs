@@ -174,6 +174,11 @@ async fn main() {
         proxy: proxy_config,
         tls_backend: config.tls_backend,
     });
+    anthropic::cache_metering::set_kv_cache_config(
+        config.cache_read_efficiency,
+        config.kv_cache_ttl_secs,
+    );
+    anthropic::model_registry::set_models(config.models.clone());
 
     // 客户端 Key 管理器 + 用量记录器 + 聚合器（与凭据文件同目录）
     let cache_dir = token_manager

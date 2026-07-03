@@ -4,6 +4,52 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// 可配置模型映射条目。
+///
+/// 配置在 `config.json` 的 `models` 数组中。命中后优先于内置模型映射，
+/// 用于无需发版即可添加新模型别名或调整上下文窗口。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelEntry {
+    /// 对外暴露的 Anthropic 风格模型 ID
+    pub id: String,
+    /// /v1/models 展示名
+    #[serde(default)]
+    pub display_name: String,
+    /// Kiro 上游模型 ID
+    pub kiro_model_id: String,
+    /// 上下文窗口
+    #[serde(default = "default_model_context_window")]
+    pub context_window: i32,
+    /// 最大输出 tokens
+    #[serde(default = "default_model_max_tokens")]
+    pub max_tokens: i32,
+    /// 额外匹配关键词（小写包含匹配）
+    #[serde(default)]
+    pub match_keywords: Vec<String>,
+    /// /v1/models created 时间戳
+    #[serde(default = "default_model_created")]
+    pub created: i64,
+}
+
+impl ModelEntry {
+    pub fn matches(&self, model_lower: &str) -> bool {
+        self.id.eq_ignore_ascii_case(model_lower)
+            || self
+                .match_keywords
+                .iter()
+                .any(|kw| !kw.trim().is_empty() && model_lower.contains(&kw.to_lowercase()))
+    }
+
+    pub fn display_name(&self) -> String {
+        if self.display_name.trim().is_empty() {
+            self.id.clone()
+        } else {
+            self.display_name.clone()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum TlsBackend {
@@ -165,6 +211,18 @@ pub struct Config {
     #[serde(default = "default_usage_log_retention_days")]
     pub usage_log_retention_days: u32,
 
+    /// Prompt cache 命中折算系数，0.0..=1.0。
+    #[serde(default = "default_cache_read_efficiency")]
+    pub cache_read_efficiency: f64,
+
+    /// Prompt cache 状态 TTL 秒数。
+    #[serde(default = "default_kv_cache_ttl_secs")]
+    pub kv_cache_ttl_secs: i64,
+
+    /// 可热更新的模型映射表。
+    #[serde(default)]
+    pub models: Vec<ModelEntry>,
+
     /// 端点特定的配置
     ///
     /// 键为端点名（如 "ide" / "cli"），值为该端点自由定义的参数对象。
@@ -245,6 +303,26 @@ fn default_usage_log_retention_days() -> u32 {
     31
 }
 
+fn default_cache_read_efficiency() -> f64 {
+    0.9
+}
+
+fn default_kv_cache_ttl_secs() -> i64 {
+    1800
+}
+
+fn default_model_context_window() -> i32 {
+    200_000
+}
+
+fn default_model_max_tokens() -> i32 {
+    64_000
+}
+
+fn default_model_created() -> i64 {
+    0
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -280,6 +358,9 @@ impl Default for Config {
             trace_enabled: default_trace_enabled(),
             trace_retention_days: default_trace_retention_days(),
             usage_log_retention_days: default_usage_log_retention_days(),
+            cache_read_efficiency: default_cache_read_efficiency(),
+            kv_cache_ttl_secs: default_kv_cache_ttl_secs(),
+            models: Vec::new(),
             endpoints: HashMap::new(),
             config_path: None,
         }
@@ -324,6 +405,8 @@ impl Config {
         if config.update_auto_apply_time.trim().is_empty() {
             config.update_auto_apply_time = default_update_auto_apply_time();
         }
+        config.cache_read_efficiency = config.cache_read_efficiency.clamp(0.0, 1.0);
+        config.kv_cache_ttl_secs = config.kv_cache_ttl_secs.max(60);
 
         Ok(config)
     }

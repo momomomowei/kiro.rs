@@ -300,6 +300,25 @@ export interface UpdateAdminKeyRequest {
   newKey: string
 }
 
+export interface KvCacheConfig {
+  cacheReadEfficiency: number
+  kvCacheTtlSecs: number
+}
+
+export interface ModelEntry {
+  id: string
+  displayName: string
+  kiroModelId: string
+  contextWindow: number
+  maxTokens: number
+  matchKeywords: string[]
+  created: number
+}
+
+export interface ModelsConfig {
+  models: ModelEntry[]
+}
+
 // IdC 设备授权登录
 export interface StartIdcLoginRequest {
   region: string

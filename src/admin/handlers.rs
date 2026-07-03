@@ -24,8 +24,9 @@ use super::{
         ClientKeyItem, ClientKeysResponse, CompleteSocialLoginRequest,
         CreateClientKeyRequest, CreateClientKeyResponse, GlobalProxyResponse,
         SetAccountThrottleConfigRequest, SetDisabledRequest, SetGlobalProxyRequest,
-        SetLoadBalancingModeRequest, SetLogGovernanceConfigRequest, SetPriorityRequest,
-        SetUpdateConfigRequest, StartIdcLoginRequest, StartSocialLoginRequest, SuccessResponse,
+        SetKvCacheConfigRequest, SetLoadBalancingModeRequest, SetLogGovernanceConfigRequest,
+        SetModelsRequest, SetPriorityRequest, SetUpdateConfigRequest, StartIdcLoginRequest,
+        StartSocialLoginRequest, SuccessResponse,
         UpdateAdminKeyRequest, UpdateClientKeyRequest, UpdateCredentialRequest,
         UpdateRefreshTokenRequest,
     },
@@ -178,6 +179,44 @@ pub async fn set_credential_overage(
         .into_response(),
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
+}
+
+/// GET /api/admin/config/kv-cache
+pub async fn get_kv_cache_config(State(state): State<AdminState>) -> impl IntoResponse {
+    Json(state.service.get_kv_cache_config()).into_response()
+}
+
+/// PUT /api/admin/config/kv-cache
+pub async fn set_kv_cache_config(
+    State(state): State<AdminState>,
+    Json(payload): Json<SetKvCacheConfigRequest>,
+) -> impl IntoResponse {
+    match state.service.set_kv_cache_config(payload) {
+        Ok(response) => Json(response).into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}
+
+/// GET /api/admin/config/models
+pub async fn get_models_config(State(state): State<AdminState>) -> impl IntoResponse {
+    Json(state.service.get_models()).into_response()
+}
+
+/// PUT /api/admin/config/models
+pub async fn set_models_config(
+    State(state): State<AdminState>,
+    Json(payload): Json<SetModelsRequest>,
+) -> impl IntoResponse {
+    match state.service.set_models(payload) {
+        Ok(response) => Json(response).into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}
+
+/// POST /api/admin/restart
+pub async fn restart_service(State(state): State<AdminState>) -> impl IntoResponse {
+    state.service.restart_service();
+    Json(SuccessResponse::new("服务将在约 0.5 秒后重启")).into_response()
 }
 
 /// POST /api/admin/credentials/overage/enable-all

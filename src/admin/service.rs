@@ -25,10 +25,12 @@ use super::types::{
     CheckRateLimitRequest, CredentialStatusItem, CredentialsStatusResponse, EnableOverageAllResult,
     GitHubRateLimitInfo, ImageUpdateResponse, ExportedAccount, ExportedCredentials,
     CredentialsExportResponse,
-    LoadBalancingModeResponse, LogGovernanceConfigResponse, PollIdcLoginResponse,
+    KvCacheConfigResponse, LoadBalancingModeResponse, LogGovernanceConfigResponse,
+    ModelsConfigResponse, PollIdcLoginResponse,
     ProxyCheckAllResponse, ProxyCheckResponse, ProxyPoolEntry, ProxyPoolResponse,
-    QuotaExceededResult, SetAccountThrottleConfigRequest, SetLoadBalancingModeRequest,
-    SetLogGovernanceConfigRequest, SetUpdateConfigRequest, StartIdcLoginRequest,
+    QuotaExceededResult, SetAccountThrottleConfigRequest, SetKvCacheConfigRequest,
+    SetLoadBalancingModeRequest, SetLogGovernanceConfigRequest, SetModelsRequest,
+    SetUpdateConfigRequest, StartIdcLoginRequest,
     StartIdcLoginResponse, StartSocialLoginRequest, StartSocialLoginResponse, UpdateCheckInfo,
     UpdateConfigResponse, UpdateCredentialRequest, UpdateRefreshTokenRequest,
 };
@@ -692,6 +694,105 @@ impl AdminService {
         self.token_manager
             .set_priority(id, priority)
             .map_err(|e| self.classify_error(e, id))
+    }
+
+    pub fn get_kv_cache_config(&self) -> KvCacheConfigResponse {
+        KvCacheConfigResponse {
+            cache_read_efficiency: crate::anthropic::cache_metering::get_cache_read_efficiency(),
+            kv_cache_ttl_secs: crate::anthropic::cache_metering::get_kv_cache_ttl_secs(),
+        }
+    }
+
+    pub fn set_kv_cache_config(
+        &self,
+        req: SetKvCacheConfigRequest,
+    ) -> Result<KvCacheConfigResponse, AdminServiceError> {
+        let config_path = self
+            .token_manager
+            .config()
+            .config_path()
+            .ok_or_else(|| AdminServiceError::InternalError("配置文件路径未知".to_string()))?;
+        let mut config = Config::load(config_path)
+            .map_err(|e| AdminServiceError::InternalError(e.to_string()))?;
+
+        if let Some(efficiency) = req.cache_read_efficiency {
+            if !efficiency.is_finite() {
+                return Err(AdminServiceError::InvalidCredential(
+                    "cacheReadEfficiency 必须是有效数字".to_string(),
+                ));
+            }
+            config.cache_read_efficiency = efficiency.clamp(0.0, 1.0);
+        }
+        if let Some(ttl) = req.kv_cache_ttl_secs {
+            config.kv_cache_ttl_secs = ttl.clamp(60, 86_400);
+        }
+        config
+            .save()
+            .map_err(|e| AdminServiceError::InternalError(e.to_string()))?;
+        crate::anthropic::cache_metering::set_kv_cache_config(
+            config.cache_read_efficiency,
+            config.kv_cache_ttl_secs,
+        );
+
+        Ok(KvCacheConfigResponse {
+            cache_read_efficiency: config.cache_read_efficiency,
+            kv_cache_ttl_secs: config.kv_cache_ttl_secs,
+        })
+    }
+
+    pub fn get_models(&self) -> ModelsConfigResponse {
+        ModelsConfigResponse {
+            models: crate::anthropic::model_registry::get_models(),
+        }
+    }
+
+    pub fn set_models(
+        &self,
+        req: SetModelsRequest,
+    ) -> Result<ModelsConfigResponse, AdminServiceError> {
+        let mut seen = HashSet::new();
+        for model in &req.models {
+            if model.id.trim().is_empty() || model.kiro_model_id.trim().is_empty() {
+                return Err(AdminServiceError::InvalidCredential(
+                    "模型 id 和 kiroModelId 不能为空".to_string(),
+                ));
+            }
+            if model.context_window <= 0 || model.max_tokens <= 0 {
+                return Err(AdminServiceError::InvalidCredential(
+                    "contextWindow 和 maxTokens 必须大于 0".to_string(),
+                ));
+            }
+            let id = model.id.trim().to_ascii_lowercase();
+            if !seen.insert(id) {
+                return Err(AdminServiceError::InvalidCredential(
+                    "模型 id 不能重复".to_string(),
+                ));
+            }
+        }
+
+        let config_path = self
+            .token_manager
+            .config()
+            .config_path()
+            .ok_or_else(|| AdminServiceError::InternalError("配置文件路径未知".to_string()))?;
+        let mut config = Config::load(config_path)
+            .map_err(|e| AdminServiceError::InternalError(e.to_string()))?;
+        config.models = req.models.clone();
+        config
+            .save()
+            .map_err(|e| AdminServiceError::InternalError(e.to_string()))?;
+        crate::anthropic::model_registry::set_models(req.models.clone());
+
+        Ok(ModelsConfigResponse { models: req.models })
+    }
+
+    /// 重启服务：返回响应后延迟退出进程，由 Docker / systemd 等外部守护拉起。
+    pub fn restart_service(&self) {
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            tracing::warn!("收到 admin 重启请求，进程即将退出");
+            std::process::exit(0);
+        });
     }
 
     /// 重置失败计数并重新启用

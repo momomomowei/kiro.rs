@@ -364,7 +364,7 @@ fn resolve_usage_input_tokens(
 }
 
 fn available_models() -> Vec<Model> {
-    vec![
+    let mut models = vec![
         Model {
             id: "claude-opus-4-8".to_string(),
             object: "model".to_string(),
@@ -509,7 +509,31 @@ fn available_models() -> Vec<Model> {
             model_type: "chat".to_string(),
             max_tokens: 64000,
         },
-    ]
+    ];
+
+    for entry in super::model_registry::get_models() {
+        let display_name = entry.display_name();
+        models.push(Model {
+            id: entry.id.clone(),
+            object: "model".to_string(),
+            created: entry.created,
+            owned_by: "anthropic".to_string(),
+            display_name: display_name.clone(),
+            model_type: "chat".to_string(),
+            max_tokens: entry.max_tokens.max(1),
+        });
+        models.push(Model {
+            id: format!("{}-thinking", entry.id),
+            object: "model".to_string(),
+            created: entry.created,
+            owned_by: "anthropic".to_string(),
+            display_name: format!("{} (Thinking)", display_name),
+            model_type: "chat".to_string(),
+            max_tokens: entry.max_tokens.max(1),
+        });
+    }
+
+    models
 }
 
 /// GET /v1/models
