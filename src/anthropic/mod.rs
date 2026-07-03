@@ -26,6 +26,7 @@ mod converter;
 mod handlers;
 mod middleware;
 pub mod cache_metering;
+pub mod model_cache;
 pub mod model_registry;
 mod router;
 pub mod stream;

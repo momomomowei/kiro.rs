@@ -364,176 +364,123 @@ fn resolve_usage_input_tokens(
 }
 
 fn available_models() -> Vec<Model> {
-    let mut models = vec![
-        Model {
-            id: "claude-opus-4-8".to_string(),
-            object: "model".to_string(),
-            created: 1779897600, // May 28, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Opus 4.8".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-opus-4-8-thinking".to_string(),
-            object: "model".to_string(),
-            created: 1779897600, // May 28, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Opus 4.8 (Thinking)".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-sonnet-4-8".to_string(),
-            object: "model".to_string(),
-            created: 1779897600, // May 28, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Sonnet 4.8".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-sonnet-4-8-thinking".to_string(),
-            object: "model".to_string(),
-            created: 1779897600, // May 28, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Sonnet 4.8 (Thinking)".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-opus-4-7".to_string(),
-            object: "model".to_string(),
-            created: 1776276000, // Apr 16, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Opus 4.7".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-opus-4-7-thinking".to_string(),
-            object: "model".to_string(),
-            created: 1776276000, // Apr 16, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Opus 4.7 (Thinking)".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-opus-4-6".to_string(),
-            object: "model".to_string(),
-            created: 1770163200, // Feb 4, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Opus 4.6".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-opus-4-6-thinking".to_string(),
-            object: "model".to_string(),
-            created: 1770163200, // Feb 4, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Opus 4.6 (Thinking)".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-sonnet-4-6".to_string(),
-            object: "model".to_string(),
-            created: 1771286400, // Feb 17, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Sonnet 4.6".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-sonnet-4-6-thinking".to_string(),
-            object: "model".to_string(),
-            created: 1771286400, // Feb 17, 2026
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Sonnet 4.6 (Thinking)".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-opus-4-5-20251101".to_string(),
-            object: "model".to_string(),
-            created: 1763942400, // Nov 24, 2025
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Opus 4.5".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-opus-4-5-20251101-thinking".to_string(),
-            object: "model".to_string(),
-            created: 1763942400, // Nov 24, 2025
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Opus 4.5 (Thinking)".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-sonnet-4-5-20250929".to_string(),
-            object: "model".to_string(),
-            created: 1759104000, // Sep 29, 2025
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Sonnet 4.5".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-sonnet-4-5-20250929-thinking".to_string(),
-            object: "model".to_string(),
-            created: 1759104000, // Sep 29, 2025
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Sonnet 4.5 (Thinking)".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-haiku-4-5-20251001".to_string(),
-            object: "model".to_string(),
-            created: 1760486400, // Oct 15, 2025
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Haiku 4.5".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-        Model {
-            id: "claude-haiku-4-5-20251001-thinking".to_string(),
-            object: "model".to_string(),
-            created: 1760486400, // Oct 15, 2025
-            owned_by: "anthropic".to_string(),
-            display_name: "Claude Haiku 4.5 (Thinking)".to_string(),
-            model_type: "chat".to_string(),
-            max_tokens: 64000,
-        },
-    ];
-
-    for entry in super::model_registry::get_models() {
-        let display_name = entry.display_name();
-        models.push(Model {
-            id: entry.id.clone(),
-            object: "model".to_string(),
-            created: entry.created,
-            owned_by: "anthropic".to_string(),
-            display_name: display_name.clone(),
-            model_type: "chat".to_string(),
-            max_tokens: entry.max_tokens.max(1),
-        });
-        models.push(Model {
-            id: format!("{}-thinking", entry.id),
-            object: "model".to_string(),
-            created: entry.created,
-            owned_by: "anthropic".to_string(),
-            display_name: format!("{} (Thinking)", display_name),
-            model_type: "chat".to_string(),
-            max_tokens: entry.max_tokens.max(1),
-        });
+    let cached = super::model_cache::get_models();
+    if !cached.is_empty() {
+        let mut models = Vec::with_capacity(cached.len() * 2);
+        for upstream in cached {
+            let display_name = upstream
+                .model_name
+                .clone()
+                .unwrap_or_else(|| upstream.model_id.clone());
+            let max_tokens = upstream
+                .token_limits
+                .as_ref()
+                .and_then(|limits| limits.max_input_tokens)
+                .and_then(|tokens| i32::try_from(tokens).ok())
+                .unwrap_or(64000)
+                .max(1);
+            models.push(Model {
+                id: upstream.model_id.clone(),
+                object: "model".to_string(),
+                created: 0,
+                owned_by: "anthropic".to_string(),
+                display_name: display_name.clone(),
+                model_type: "chat".to_string(),
+                max_tokens,
+            });
+            models.push(Model {
+                id: format!("{}-thinking", upstream.model_id),
+                object: "model".to_string(),
+                created: 0,
+                owned_by: "anthropic".to_string(),
+                display_name: format!("{} (Thinking)", display_name),
+                model_type: "chat".to_string(),
+                max_tokens,
+            });
+        }
+        append_configured_models(&mut models);
+        return models;
     }
 
+    let mut models = builtin_models();
+
+    append_configured_models(&mut models);
+
     models
+}
+
+fn builtin_models() -> Vec<Model> {
+    let entries = [
+        ("claude-sonnet-5", "Claude Sonnet 5", 1_000_000, true),
+        ("claude-opus-4.8", "Claude Opus 4.8", 1_000_000, true),
+        ("claude-opus-4.7", "Claude Opus 4.7", 1_000_000, true),
+        ("claude-opus-4.6", "Claude Opus 4.6", 1_000_000, true),
+        ("claude-sonnet-4.6", "Claude Sonnet 4.6", 1_000_000, true),
+        ("claude-opus-4.5", "Claude Opus 4.5", 200_000, true),
+        ("claude-sonnet-4.5", "Claude Sonnet 4.5", 200_000, true),
+        ("claude-sonnet-4", "Claude Sonnet 4", 200_000, true),
+        ("claude-haiku-4.5", "Claude Haiku 4.5", 200_000, true),
+        ("deepseek-3.2", "Deepseek v3.2", 164_000, true),
+        ("minimax-m2.5", "MiniMax M2.5", 196_000, true),
+        ("minimax-m2.1", "MiniMax M2.1", 196_000, true),
+        ("glm-5", "GLM 5", 200_000, true),
+        ("qwen3-coder-next", "Qwen3 Coder Next", 256_000, true),
+    ];
+
+    let mut models = Vec::with_capacity(entries.len() * 2);
+    for (id, display_name, max_tokens, thinking) in entries {
+        models.push(Model {
+            id: id.to_string(),
+            object: "model".to_string(),
+            created: 0,
+            owned_by: "kiro".to_string(),
+            display_name: display_name.to_string(),
+            model_type: "chat".to_string(),
+            max_tokens,
+        });
+        if thinking {
+            models.push(Model {
+                id: format!("{}-thinking", id),
+                object: "model".to_string(),
+                created: 0,
+                owned_by: "kiro".to_string(),
+                display_name: format!("{} (Thinking)", display_name),
+                model_type: "chat".to_string(),
+                max_tokens,
+            });
+        }
+    }
+    models
+}
+
+fn append_configured_models(models: &mut Vec<Model>) {
+    for entry in super::model_registry::get_models() {
+        let display_name = entry.display_name();
+        let id = entry.id.clone();
+        if !models.iter().any(|model| model.id == id) {
+            models.push(Model {
+                id: id.clone(),
+                object: "model".to_string(),
+                created: entry.created,
+                owned_by: "anthropic".to_string(),
+                display_name: display_name.clone(),
+                model_type: "chat".to_string(),
+                max_tokens: entry.max_tokens.max(1),
+            });
+        }
+        let thinking_id = format!("{}-thinking", entry.id);
+        if !models.iter().any(|model| model.id == thinking_id) {
+            models.push(Model {
+                id: thinking_id,
+                object: "model".to_string(),
+                created: entry.created,
+                owned_by: "anthropic".to_string(),
+                display_name: format!("{} (Thinking)", display_name),
+                model_type: "chat".to_string(),
+                max_tokens: entry.max_tokens.max(1),
+            });
+        }
+    }
 }
 
 /// GET /v1/models
@@ -1785,8 +1732,8 @@ mod tests {
         let models = available_models();
         let ids: Vec<&str> = models.iter().map(|model| model.id.as_str()).collect();
 
-        assert!(ids.contains(&"claude-opus-4-7"));
-        assert!(ids.contains(&"claude-opus-4-7-thinking"));
+        assert!(ids.contains(&"claude-opus-4.7"));
+        assert!(ids.contains(&"claude-opus-4.7-thinking"));
     }
 
     #[test]
@@ -1840,13 +1787,15 @@ mod tests {
     }
 
     #[test]
-    fn available_models_include_4_8_variants() {
+    fn available_models_include_new_builtin_variants() {
         let models = available_models();
         let ids: Vec<&str> = models.iter().map(|model| model.id.as_str()).collect();
 
-        assert!(ids.contains(&"claude-opus-4-8"));
-        assert!(ids.contains(&"claude-opus-4-8-thinking"));
-        assert!(ids.contains(&"claude-sonnet-4-8"));
-        assert!(ids.contains(&"claude-sonnet-4-8-thinking"));
+        assert!(ids.contains(&"claude-opus-4.8"));
+        assert!(ids.contains(&"claude-opus-4.8-thinking"));
+        assert!(ids.contains(&"claude-sonnet-5"));
+        assert!(ids.contains(&"claude-sonnet-5-thinking"));
+        assert!(ids.contains(&"qwen3-coder-next"));
+        assert!(ids.contains(&"qwen3-coder-next-thinking"));
     }
 }

@@ -197,6 +197,27 @@ pub async fn set_kv_cache_config(
     }
 }
 
+/// POST /api/admin/credentials/:id/models/refresh
+pub async fn refresh_credential_models(
+    State(state): State<AdminState>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
+    match state.service.refresh_model_cache_for(id).await {
+        Ok(response) => Json(response).into_response(),
+        Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
+    }
+}
+
+/// GET /api/admin/model-cache
+pub async fn get_model_cache(State(state): State<AdminState>) -> impl IntoResponse {
+    Json(state.service.get_model_cache()).into_response()
+}
+
+/// POST /api/admin/model-cache/refresh
+pub async fn refresh_all_models(State(state): State<AdminState>) -> impl IntoResponse {
+    Json(state.service.refresh_all_model_cache().await).into_response()
+}
+
 /// GET /api/admin/config/models
 pub async fn get_models_config(State(state): State<AdminState>) -> impl IntoResponse {
     Json(state.service.get_models()).into_response()

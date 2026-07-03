@@ -15,12 +15,12 @@ use super::{
         delete_credential, delete_group, delete_proxy, disable_quota_exceeded, enable_overage_all,
         export_credentials, force_refresh_token, get_account_throttle_config, get_kv_cache_config,
         get_all_credentials, get_credential_balance, get_credential_models, get_global_proxy,
-        get_load_balancing_mode, get_log_governance_config, get_models_config, get_proxy_pool, get_update_config,
+        get_load_balancing_mode, get_log_governance_config, get_model_cache, get_models_config, get_proxy_pool, get_update_config,
         list_client_keys, list_groups, list_traces, trace_failure_stats, poll_idc_login,
         poll_idc_relogin, poll_social_login,
         poll_social_relogin, pull_update_image, reset_all_success_count, reset_client_key_stats,
-        reset_failure_count, reset_success_count, rollback_image_update, rotate_client_key,
-        restart_service,
+        refresh_all_models, refresh_credential_models, reset_failure_count, reset_success_count,
+        rollback_image_update, rotate_client_key, restart_service,
         set_account_throttle_config, set_client_key_disabled, set_credential_disabled,
         set_credential_overage, set_credential_priority, set_global_proxy,
         set_kv_cache_config, set_load_balancing_mode, set_log_governance_config,
@@ -84,6 +84,9 @@ pub fn create_admin_router(state: AdminState) -> Router {
         .route("/credentials/{id}/refresh-token", put(update_refresh_token))
         .route("/credentials/{id}/balance", get(get_credential_balance))
         .route("/credentials/{id}/models", get(get_credential_models))
+        .route("/credentials/{id}/models/refresh", post(refresh_credential_models))
+        .route("/model-cache", get(get_model_cache))
+        .route("/model-cache/refresh", post(refresh_all_models))
         .route("/credentials/{id}/proxy", post(assign_proxy_to_credential))
         .route("/proxy-pool", get(get_proxy_pool).post(add_proxy))
         .route("/proxy-pool/batch", post(batch_add_proxies))

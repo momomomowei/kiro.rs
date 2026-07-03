@@ -459,6 +459,25 @@ pub struct SetLogGovernanceConfigRequest {
     pub usage_log_retention_days: Option<u32>,
 }
 
+/// 运行时模型缓存快照
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelCacheResponse {
+    pub cached_at: Option<i64>,
+    pub models: Vec<crate::kiro::model::available_models::UpstreamModel>,
+    pub accounts: std::collections::HashMap<u64, Vec<String>>,
+}
+
+/// 模型缓存刷新结果
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshModelCacheResponse {
+    pub success: bool,
+    pub refreshed: usize,
+    pub failed: usize,
+    pub count: usize,
+}
+
 /// KV Cache 配置响应
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

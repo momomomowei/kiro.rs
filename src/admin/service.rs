@@ -26,9 +26,9 @@ use super::types::{
     GitHubRateLimitInfo, ImageUpdateResponse, ExportedAccount, ExportedCredentials,
     CredentialsExportResponse,
     KvCacheConfigResponse, LoadBalancingModeResponse, LogGovernanceConfigResponse,
-    ModelsConfigResponse, PollIdcLoginResponse,
+    ModelCacheResponse, ModelsConfigResponse, PollIdcLoginResponse,
     ProxyCheckAllResponse, ProxyCheckResponse, ProxyPoolEntry, ProxyPoolResponse,
-    QuotaExceededResult, SetAccountThrottleConfigRequest, SetKvCacheConfigRequest,
+    QuotaExceededResult, RefreshModelCacheResponse, SetAccountThrottleConfigRequest, SetKvCacheConfigRequest,
     SetLoadBalancingModeRequest, SetLogGovernanceConfigRequest, SetModelsRequest,
     SetUpdateConfigRequest, StartIdcLoginRequest,
     StartIdcLoginResponse, StartSocialLoginRequest, StartSocialLoginResponse, UpdateCheckInfo,
@@ -884,7 +884,7 @@ impl AdminService {
         })
     }
 
-    /// 获取指定凭据当前可用的模型列表（按需实时查询上游，不缓存）
+    /// 获取指定凭据当前可用的模型列表（按需实时查询上游，并同步写入运行时缓存）
     pub async fn get_available_models(
         &self,
         id: u64,
@@ -894,6 +894,8 @@ impl AdminService {
             .get_available_models_for(id)
             .await
             .map_err(|e| self.classify_balance_error(e, id))?;
+
+        crate::anthropic::model_cache::set_account_models(id, resp.models.clone());
 
         let models = resp
             .models
@@ -907,6 +909,72 @@ impl AdminService {
             .collect();
 
         Ok(AvailableModelsResponse { id, models })
+    }
+
+    /// 当前运行时模型缓存快照
+    pub fn get_model_cache(&self) -> ModelCacheResponse {
+        let snapshot = crate::anthropic::model_cache::snapshot();
+        ModelCacheResponse {
+            cached_at: snapshot.cached_at,
+            models: snapshot.models,
+            accounts: snapshot.accounts,
+        }
+    }
+
+    /// 刷新指定凭据的模型缓存
+    pub async fn refresh_model_cache_for(
+        &self,
+        id: u64,
+    ) -> Result<RefreshModelCacheResponse, AdminServiceError> {
+        let resp = self
+            .token_manager
+            .get_available_models_for(id)
+            .await
+            .map_err(|e| self.classify_balance_error(e, id))?;
+        let count = resp.models.len();
+        crate::anthropic::model_cache::set_account_models(id, resp.models);
+
+        Ok(RefreshModelCacheResponse {
+            success: true,
+            refreshed: 1,
+            failed: 0,
+            count,
+        })
+    }
+
+    /// 刷新所有未禁用凭据的模型缓存
+    pub async fn refresh_all_model_cache(&self) -> RefreshModelCacheResponse {
+        let snapshot = self.token_manager.snapshot();
+        let mut account_models = HashMap::new();
+        let mut refreshed = 0_usize;
+        let mut failed = 0_usize;
+
+        for entry in snapshot.entries.into_iter() {
+            if entry.disabled {
+                continue;
+            }
+            match self.token_manager.get_available_models_for(entry.id).await {
+                Ok(resp) => {
+                    refreshed += 1;
+                    account_models.insert(entry.id, resp.models);
+                }
+                Err(e) => {
+                    failed += 1;
+                    tracing::warn!("刷新凭据 #{} 模型缓存失败: {}", entry.id, e);
+                }
+            }
+        }
+
+        if !account_models.is_empty() {
+            crate::anthropic::model_cache::replace_all(account_models);
+        }
+        let count = crate::anthropic::model_cache::get_models().len();
+        RefreshModelCacheResponse {
+            success: failed == 0,
+            refreshed,
+            failed,
+            count,
+        }
     }
 
     /// 批量刷新所有非禁用凭据的余额（用于后台调度）
@@ -968,6 +1036,28 @@ impl AdminService {
                     "余额后台刷新完成：成功 {}，失败 {}，耗时 {:.1}s",
                     ok,
                     err,
+                    started.elapsed().as_secs_f32()
+                );
+                tokio::time::sleep(interval).await;
+            }
+        });
+    }
+
+    /// 启动模型缓存后台刷新调度器
+    ///
+    /// 启动后先刷新一次；之后按周期聚合所有未禁用凭据的上游可用模型。
+    pub fn start_model_cache_refresher(self: &Arc<Self>, interval: std::time::Duration) {
+        let svc = Arc::clone(self);
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            loop {
+                let started = std::time::Instant::now();
+                let summary = svc.refresh_all_model_cache().await;
+                tracing::info!(
+                    "模型缓存后台刷新完成：成功 {}，失败 {}，缓存模型 {}，耗时 {:.1}s",
+                    summary.refreshed,
+                    summary.failed,
+                    summary.count,
                     started.elapsed().as_secs_f32()
                 );
                 tokio::time::sleep(interval).await;

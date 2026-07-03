@@ -928,6 +928,16 @@ fn credential_matches_request(
     model: Option<&str>,
     group: Option<&str>,
 ) -> bool {
+    if !group_matches(&credentials.groups, group) {
+        return false;
+    }
+
+    if let (Some(id), Some(model)) = (credentials.id, model)
+        && let Some(supported) = crate::anthropic::model_cache::account_supports_model(id, model)
+    {
+        return supported;
+    }
+
     let is_opus = model
         .map(|m| m.to_ascii_lowercase().contains("opus"))
         .unwrap_or(false);
@@ -936,7 +946,7 @@ fn credential_matches_request(
         return false;
     }
 
-    group_matches(&credentials.groups, group)
+    true
 }
 
 impl MultiTokenManager {

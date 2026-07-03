@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Boxes, Plus, Power, Sparkles, Timer, Trash2 } from 'lucide-react'
+import { Boxes, Plus, Power, RefreshCw, Sparkles, Timer, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   useKvCacheConfig,
+  useModelCache,
   useModelsConfig,
+  useRefreshAllModels,
   useRestartService,
   useSetKvCacheConfig,
   useSetModelsConfig,
@@ -143,7 +145,9 @@ const emptyModel = (): ModelEntry => ({
 
 function ModelsPanel() {
   const { data, isLoading } = useModelsConfig()
+  const { data: modelCache } = useModelCache()
   const saveModels = useSetModelsConfig()
+  const refreshModels = useRefreshAllModels()
   const restart = useRestartService()
   const [models, setModels] = useState<ModelEntry[]>([])
   const [dirty, setDirty] = useState(false)
@@ -183,6 +187,22 @@ function ModelsPanel() {
     })
   }
 
+  const handleRefreshModels = () => {
+    refreshModels.mutate(undefined, {
+      onSuccess: (res) => {
+        const message = `模型缓存刷新完成：${res.count} 个模型，成功 ${res.refreshed}，失败 ${res.failed}`
+        if (res.failed > 0) toast.warning(message)
+        else toast.success(message)
+      },
+      onError: (err) => toast.error('刷新失败: ' + extractErrorMessage(err)),
+    })
+  }
+
+  const cachedAt = modelCache?.cachedAt
+    ? new Date(modelCache.cachedAt * 1000).toLocaleString()
+    : '尚未刷新'
+  const cachedAccounts = modelCache ? Object.keys(modelCache.accounts).length : 0
+
   return (
     <section>
       <Card>
@@ -195,20 +215,47 @@ function ModelsPanel() {
               <div>
                 <h3 className="text-sm font-semibold">模型配置</h3>
                 <p className="text-[12px] text-muted-foreground">
-                  新增/编辑模型映射，保存即热更新生效
+                  上游模型缓存优先生效，手动映射作为补充覆盖
                 </p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRestart}
-              disabled={restart.isPending}
-              title="让外部守护进程拉起服务"
-            >
-              <Power className="h-3.5 w-3.5" />
-              {restart.isPending ? '重启中…' : '重启服务'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshModels}
+                disabled={refreshModels.isPending}
+                title="从所有已启用凭据拉取上游可用模型"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshModels.isPending ? 'animate-spin' : ''}`} />
+                {refreshModels.isPending ? '刷新中…' : '刷新缓存'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRestart}
+                disabled={restart.isPending}
+                title="让外部守护进程拉起服务"
+              >
+                <Power className="h-3.5 w-3.5" />
+                {restart.isPending ? '重启中…' : '重启服务'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-2 text-[12px] text-muted-foreground sm:grid-cols-3">
+            <div className="rounded-lg border border-border/60 px-3 py-2">
+              <div className="font-medium text-foreground">{modelCache?.models.length ?? 0}</div>
+              <div>缓存模型</div>
+            </div>
+            <div className="rounded-lg border border-border/60 px-3 py-2">
+              <div className="font-medium text-foreground">{cachedAccounts}</div>
+              <div>已缓存账号</div>
+            </div>
+            <div className="rounded-lg border border-border/60 px-3 py-2">
+              <div className="truncate font-medium text-foreground">{cachedAt}</div>
+              <div>更新时间</div>
+            </div>
           </div>
 
           {isLoading ? (

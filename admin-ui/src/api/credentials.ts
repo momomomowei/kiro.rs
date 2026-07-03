@@ -38,6 +38,8 @@ import type {
   KvCacheConfig,
   ModelEntry,
   ModelsConfig,
+  ModelCacheResponse,
+  RefreshModelCacheResponse,
 } from '@/types/api'
 
 // 创建 axios 实例
@@ -167,6 +169,25 @@ export async function getCredentialBalance(id: number): Promise<BalanceResponse>
 // 获取凭据当前可用的模型列表（按需实时查询上游）
 export async function getCredentialModels(id: number): Promise<AvailableModelsResponse> {
   const { data } = await api.get<AvailableModelsResponse>(`/credentials/${id}/models`)
+  return data
+}
+
+export async function refreshCredentialModels(id: number): Promise<RefreshModelCacheResponse> {
+  const { data } = await api.post<RefreshModelCacheResponse>(`/credentials/${id}/models/refresh`, undefined, {
+    timeout: 120000,
+  })
+  return data
+}
+
+export async function getModelCache(): Promise<ModelCacheResponse> {
+  const { data } = await api.get<ModelCacheResponse>('/model-cache')
+  return data
+}
+
+export async function refreshAllModels(): Promise<RefreshModelCacheResponse> {
+  const { data } = await api.post<RefreshModelCacheResponse>('/model-cache/refresh', undefined, {
+    timeout: 120000,
+  })
   return data
 }
 

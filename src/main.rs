@@ -308,6 +308,11 @@ async fn main() {
                 .service
                 .start_balance_refresher(std::time::Duration::from_secs(300));
 
+            // 启动模型缓存后台刷新调度器：优先使用上游模型列表，避免依赖内置模型映射。
+            admin_state
+                .service
+                .start_model_cache_refresher(std::time::Duration::from_secs(30 * 60));
+
             // 启动代理池健康检查调度器（每 5 分钟一次）
             admin_state
                 .service

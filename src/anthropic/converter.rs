@@ -150,18 +150,23 @@ pub fn map_model_with_config(model: &str, models: &[ModelEntry]) -> Option<Strin
         .iter()
         .find(|entry| entry.matches(&model_lower))
         .map(|entry| entry.kiro_model_id.clone())
+        .or_else(|| super::model_cache::map_model(model))
         .or_else(|| map_model_builtin(model))
 }
 
 fn map_model_builtin(model: &str) -> Option<String> {
     let model_lower = model.to_lowercase();
-    if model_lower.contains("sonnet") {
-        if model_lower.contains("4-8") || model_lower.contains("4.8") {
-            Some("claude-sonnet-4.8".to_string())
+    if model_lower == "auto" {
+        Some("auto".to_string())
+    } else if model_lower.contains("sonnet") {
+        if model_lower.contains("sonnet-5") || model_lower.contains("sonnet5") {
+            Some("claude-sonnet-5".to_string())
         } else if model_lower.contains("4-6") || model_lower.contains("4.6") {
             Some("claude-sonnet-4.6".to_string())
         } else if model_lower.contains("4-5") || model_lower.contains("4.5") {
             Some("claude-sonnet-4.5".to_string())
+        } else if model_lower.contains("4") {
+            Some("claude-sonnet-4".to_string())
         } else {
             None
         }
@@ -170,15 +175,29 @@ fn map_model_builtin(model: &str) -> Option<String> {
             Some("claude-opus-4.8".to_string())
         } else if model_lower.contains("4-7") || model_lower.contains("4.7") {
             Some("claude-opus-4.7".to_string())
-        } else if model_lower.contains("4-5") || model_lower.contains("4.5") {
-            Some("claude-opus-4.5".to_string())
         } else if model_lower.contains("4-6") || model_lower.contains("4.6") {
             Some("claude-opus-4.6".to_string())
+        } else if model_lower.contains("4-5") || model_lower.contains("4.5") {
+            Some("claude-opus-4.5".to_string())
         } else {
             None
         }
     } else if model_lower.contains("haiku") {
         Some("claude-haiku-4.5".to_string())
+    } else if model_lower.contains("deepseek") {
+        Some("deepseek-3.2".to_string())
+    } else if model_lower.contains("minimax") {
+        if model_lower.contains("2-5") || model_lower.contains("2.5") {
+            Some("minimax-m2.5".to_string())
+        } else if model_lower.contains("2-1") || model_lower.contains("2.1") {
+            Some("minimax-m2.1".to_string())
+        } else {
+            None
+        }
+    } else if model_lower.contains("glm") {
+        Some("glm-5".to_string())
+    } else if model_lower.contains("qwen3") || model_lower.contains("qwen") {
+        Some("qwen3-coder-next".to_string())
     } else {
         None
     }
@@ -199,10 +218,15 @@ pub fn get_context_window_size_with_config(model: &str, models: &[ModelEntry]) -
     if let Some(entry) = models.iter().find(|entry| entry.matches(&model_lower)) {
         return entry.context_window.max(1);
     }
+    if let Some(window) = super::model_cache::context_window_for(model) {
+        return window.max(1);
+    }
 
     match map_model(model) {
         Some(mapped)
-            if mapped == "claude-sonnet-4.6"
+            if mapped == "auto"
+                || mapped == "claude-sonnet-5"
+                || mapped == "claude-sonnet-4.6"
                 || mapped == "claude-sonnet-4.8"
                 || mapped == "claude-opus-4.6"
                 || mapped == "claude-opus-4.7"
@@ -210,6 +234,9 @@ pub fn get_context_window_size_with_config(model: &str, models: &[ModelEntry]) -
         {
             1_000_000
         }
+        Some(mapped) if mapped == "deepseek-3.2" => 164_000,
+        Some(mapped) if mapped == "minimax-m2.5" || mapped == "minimax-m2.1" => 196_000,
+        Some(mapped) if mapped == "qwen3-coder-next" => 256_000,
         _ => 200_000,
     }
 }
@@ -1278,16 +1305,16 @@ mod tests {
     }
 
     #[test]
-    fn test_map_model_sonnet_4_8() {
+    fn test_map_model_sonnet_5() {
         assert_eq!(
-            map_model("claude-sonnet-4-8"),
-            Some("claude-sonnet-4.8".to_string())
+            map_model("claude-sonnet-5"),
+            Some("claude-sonnet-5".to_string())
         );
         assert_eq!(
-            map_model("claude-sonnet-4.8-thinking"),
-            Some("claude-sonnet-4.8".to_string())
+            map_model("claude-sonnet-5-thinking"),
+            Some("claude-sonnet-5".to_string())
         );
-        assert_eq!(get_context_window_size("claude-sonnet-4-8"), 1_000_000);
+        assert_eq!(get_context_window_size("claude-sonnet-5"), 1_000_000);
     }
 
     #[test]

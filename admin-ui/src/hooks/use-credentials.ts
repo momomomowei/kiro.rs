@@ -8,6 +8,7 @@ import {
   clearThrottle,
   getCredentialBalance,
   getCredentialModels,
+  getModelCache,
   addCredential,
   deleteCredential,
   updateCredential,
@@ -23,6 +24,8 @@ import {
   getModelsConfig,
   setModelsConfig,
   restartService,
+  refreshAllModels,
+  refreshCredentialModels,
   resetSuccessCount,
   resetAllSuccessCount,
 } from '@/api/credentials'
@@ -239,6 +242,17 @@ export function useSetLogGovernanceConfig() {
   })
 }
 
+export function useRefreshCredentialModels() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => refreshCredentialModels(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelCache'] })
+      queryClient.invalidateQueries({ queryKey: ['credential-models'] })
+    },
+  })
+}
+
 export function useKvCacheConfig() {
   return useQuery({
     queryKey: ['kvCacheConfig'],
@@ -260,6 +274,24 @@ export function useModelsConfig() {
   return useQuery({
     queryKey: ['modelsConfig'],
     queryFn: getModelsConfig,
+  })
+}
+
+export function useModelCache() {
+  return useQuery({
+    queryKey: ['modelCache'],
+    queryFn: getModelCache,
+    refetchInterval: 30000,
+  })
+}
+
+export function useRefreshAllModels() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: refreshAllModels,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelCache'] })
+    },
   })
 }
 

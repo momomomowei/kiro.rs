@@ -73,6 +73,28 @@ export interface AvailableModelItem {
   maxInputTokens?: number
 }
 
+export interface UpstreamModel {
+  modelId: string
+  modelName?: string
+  description?: string
+  tokenLimits?: {
+    maxInputTokens?: number
+  }
+}
+
+export interface ModelCacheResponse {
+  cachedAt?: number | null
+  models: UpstreamModel[]
+  accounts: Record<string, string[]>
+}
+
+export interface RefreshModelCacheResponse {
+  success: boolean
+  refreshed: number
+  failed: number
+  count: number
+}
+
 // 成功响应
 export interface SuccessResponse {
   success: boolean

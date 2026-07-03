@@ -5,10 +5,10 @@
 //! 上游接口：`GET https://q.{api_region}.amazonaws.com/ListAvailableModels?origin=AI_EDITOR`
 //! 返回该凭据（按订阅等级）当前真实可用的模型列表。
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// ListAvailableModels API 响应
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListAvailableModelsResponse {
     /// 可用模型列表
@@ -17,7 +17,7 @@ pub struct ListAvailableModelsResponse {
 }
 
 /// 单个上游模型
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpstreamModel {
     /// 模型 ID（如 "claude-sonnet-4.5"）
@@ -37,7 +37,7 @@ pub struct UpstreamModel {
 }
 
 /// 模型 Token 限额
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenLimits {
     /// 最大输入 Token 数
