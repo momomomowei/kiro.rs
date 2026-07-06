@@ -411,8 +411,10 @@ fn available_models() -> Vec<Model> {
 
 fn builtin_models() -> Vec<Model> {
     let entries = [
+        ("claude-fable-5", "Claude Fable 5", 1_000_000, true),
         ("claude-sonnet-5", "Claude Sonnet 5", 1_000_000, true),
         ("claude-opus-4.8", "Claude Opus 4.8", 1_000_000, true),
+        ("claude-sonnet-4.8", "Claude Sonnet 4.8", 1_000_000, true),
         ("claude-opus-4.7", "Claude Opus 4.7", 1_000_000, true),
         ("claude-opus-4.6", "Claude Opus 4.6", 1_000_000, true),
         ("claude-sonnet-4.6", "Claude Sonnet 4.6", 1_000_000, true),
